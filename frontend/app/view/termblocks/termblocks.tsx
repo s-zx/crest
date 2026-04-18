@@ -175,6 +175,16 @@ export class TermBlocksViewModel implements ViewModel {
         });
     }
 
+    async sendResize(rows: number, cols: number) {
+        if (rows <= 0 || cols <= 0) {
+            return;
+        }
+        await RpcApi.ControllerInputCommand(TabRpcClient, {
+            blockid: this.blockId,
+            termsize: { rows, cols },
+        });
+    }
+
     async submitInput(raw: string) {
         await this.sendBytes(raw + "\r");
         this.fetchBlocks();
@@ -272,13 +282,19 @@ function countNewlines(bytes: Uint8Array): number {
     return n;
 }
 
-const AltScreenXterm: React.FC<{ bytes: Uint8Array; onData: (s: string) => void }> = ({ bytes, onData }) => {
+const AltScreenXterm: React.FC<{
+    bytes: Uint8Array;
+    onData: (s: string) => void;
+    onResize: (rows: number, cols: number) => void;
+}> = ({ bytes, onData, onResize }) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const termRef = React.useRef<Terminal | null>(null);
     const writtenRef = React.useRef<number>(0);
     const onDataRef = React.useRef(onData);
+    const onResizeRef = React.useRef(onResize);
     React.useEffect(() => {
         onDataRef.current = onData;
+        onResizeRef.current = onResize;
     });
 
     React.useEffect(() => {
@@ -297,27 +313,32 @@ const AltScreenXterm: React.FC<{ bytes: Uint8Array; onData: (s: string) => void 
         const fit = new FitAddon();
         term.loadAddon(fit);
         term.open(host);
-        try {
-            fit.fit();
-        } catch {
-            // ignore
-        }
-        term.focus();
-        const onDataSub = term.onData((data) => onDataRef.current(data));
-        termRef.current = term;
-        writtenRef.current = 0;
 
-        const ro = new ResizeObserver(() => {
+        const pushSize = () => {
             try {
                 fit.fit();
             } catch {
-                // ignore
+                return;
             }
-        });
+            const t = termRef.current;
+            if (t == null) return;
+            onResizeRef.current(t.rows, t.cols);
+        };
+
+        termRef.current = term;
+        writtenRef.current = 0;
+        pushSize();
+        term.focus();
+        const onDataSub = term.onData((data) => onDataRef.current(data));
+        // xterm itself reports resizes (font load, manual cols set); forward those too.
+        const onResizeSub = term.onResize((s) => onResizeRef.current(s.rows, s.cols));
+
+        const ro = new ResizeObserver(() => pushSize());
         ro.observe(host);
         return () => {
             ro.disconnect();
             onDataSub.dispose();
+            onResizeSub.dispose();
             term.dispose();
             termRef.current = null;
         };
@@ -577,7 +598,11 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
         return (
             <div className="termblocks-root">
                 <div className="termblocks-altscreen-wrap">
-                    <AltScreenXterm bytes={bytes} onData={(s) => model.sendBytes(s)} />
+                    <AltScreenXterm
+                        bytes={bytes}
+                        onData={(s) => model.sendBytes(s)}
+                        onResize={(r, c) => model.sendResize(r, c)}
+                    />
                 </div>
             </div>
         );
