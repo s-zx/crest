@@ -202,23 +202,9 @@ function VTabWrapper({
     // Auto-generated tab names follow the "T<number>" pattern from
     // pkg/wcore.getNextTabName — if the user hasn't renamed the tab, show
     // the cwd as the primary label and skip the duplicate subtitle.
-    // When the real cwd hasn't arrived yet (e.g. a just-created block
-    // whose shell hasn't fired OSC 7 yet), fall back to the user's home
-    // directory or a plain "Terminal" so we never flash "T12".
     const rawName = tabData?.name ?? "";
     const isAutoNamed = /^T\d+$/.test(rawName);
-    let primaryName: string;
-    if (isAutoNamed) {
-        if (cwdShort) {
-            primaryName = cwdShort;
-        } else if (home) {
-            primaryName = "~";
-        } else {
-            primaryName = "Terminal";
-        }
-    } else {
-        primaryName = rawName;
-    }
+    const primaryName = isAutoNamed && cwdShort ? cwdShort : rawName;
     const subtitle = isAutoNamed ? "" : cwdShort;
 
     const tab: VTabItem = {
