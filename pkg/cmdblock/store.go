@@ -80,12 +80,21 @@ func MarkCommandSubmitted(ctx context.Context, oid string, cmd string, cwd strin
 
 // MarkCommandDone finalizes a running row with exit code and output-end offset.
 // Called on OSC 16162;D.
+//
+// If the row is still in the "prompt" state (i.e. no OSC 16162;C ever fired),
+// the user hit Enter on an empty prompt — zsh/bash still emit the D from the
+// next precmd using the previous exit code. In that case the row represents
+// nothing worth showing, so we delete it to keep the list clean.
 func MarkCommandDone(ctx context.Context, oid string, exitCode int64, outputEndOffset int64) error {
 	now := time.Now().UnixNano()
 	return wstore.WithTx(ctx, func(tx *wstore.TxWrap) error {
 		var cb CmdBlock
 		if !tx.Get(&cb, `SELECT * FROM db_cmdblock WHERE oid = ?`, oid) {
 			return ErrNotFound
+		}
+		if cb.State == StatePrompt {
+			tx.Exec(`DELETE FROM db_cmdblock WHERE oid = ?`, oid)
+			return nil
 		}
 		var durationMs int64
 		if cb.TsCmdNs != nil {

@@ -8,6 +8,7 @@ import { LauncherViewModel } from "@/app/view/launcher/launcher";
 import { PreviewModel } from "@/app/view/preview/preview-model";
 import { ProcessViewerViewModel } from "@/app/view/processviewer/processviewer";
 import { SysinfoViewModel } from "@/app/view/sysinfo/sysinfo";
+import { TermBlocksViewModel } from "@/app/view/termblocks/termblocks";
 import { TsunamiViewModel } from "@/app/view/tsunami/tsunami";
 import { VDomModel } from "@/app/view/vdom/vdom-model";
 import { WaveEnv } from "@/app/waveenv/waveenv";
@@ -35,6 +36,7 @@ BlockRegistry.set("tsunami", TsunamiViewModel);
 BlockRegistry.set("aifilediff", AiFileDiffViewModel);
 BlockRegistry.set("waveconfig", WaveConfigViewModel);
 BlockRegistry.set("processviewer", ProcessViewerViewModel);
+BlockRegistry.set("termblocks", TermBlocksViewModel);
 
 function makeDefaultViewModel(viewType: string): ViewModel {
     const viewModel: ViewModel = {
