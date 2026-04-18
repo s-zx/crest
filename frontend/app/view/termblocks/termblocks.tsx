@@ -693,7 +693,14 @@ const TermBlockRow: React.FC<{
     const hasDiff = gitInfo?.isrepo && ((gitInfo.changedfiles ?? 0) > 0);
 
     return (
-        <div className={cn("termblocks-row", `termblocks-row-${block.state}`, isError && "termblocks-row-error")}>
+        <div
+            className={cn(
+                "termblocks-row",
+                `termblocks-row-${block.state}`,
+                isError && "termblocks-row-error",
+                !showXterm && "termblocks-row-compact"
+            )}
+        >
             <div className="termblocks-row-meta">
                 {cwd && <span className="termblocks-meta-cwd">{cwd}</span>}
                 {branch && (
