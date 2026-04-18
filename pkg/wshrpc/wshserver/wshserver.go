@@ -1481,6 +1481,23 @@ func (ws *WshServer) GetCmdBlocksCommand(ctx context.Context, data wshrpc.Comman
 	return cmdblock.GetByBlockID(ctx, data.BlockID, data.Limit)
 }
 
+func (ws *WshServer) ReadBlockFileRangeCommand(ctx context.Context, data wshrpc.CommandReadBlockFileRangeData) (*wshrpc.BlockFileRangeResponse, error) {
+	if data.BlockID == "" {
+		return nil, fmt.Errorf("blockid is required")
+	}
+	if data.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	rtnOffset, rtnData, err := filestore.WFS.ReadAt(ctx, data.BlockID, data.Name, data.Offset, data.Size)
+	if err != nil {
+		return nil, fmt.Errorf("readat %q/%q @%d+%d: %w", data.BlockID, data.Name, data.Offset, data.Size, err)
+	}
+	return &wshrpc.BlockFileRangeResponse{
+		Offset: rtnOffset,
+		Data64: base64.StdEncoding.EncodeToString(rtnData),
+	}, nil
+}
+
 func (ws *WshServer) GetSecretsCommand(ctx context.Context, names []string) (map[string]string, error) {
 	result := make(map[string]string)
 	for _, name := range names {

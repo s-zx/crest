@@ -162,6 +162,12 @@ declare global {
         meta?: MetaType;
     };
 
+    // wshrpc.BlockFileRangeResponse
+    type BlockFileRangeResponse = {
+        offset: number;
+        data64: string;
+    };
+
     // wshrpc.BlockInfoData
     type BlockInfoData = {
         blockid: string;
@@ -554,6 +560,14 @@ declare global {
         data64: string;
         notfound?: boolean;
         modts?: number;
+    };
+
+    // wshrpc.CommandReadBlockFileRangeData
+    type CommandReadBlockFileRangeData = {
+        blockid: string;
+        name: string;
+        offset: number;
+        size: number;
     };
 
     // wshrpc.CommandRemoteDisconnectFromJobManagerData

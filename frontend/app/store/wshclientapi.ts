@@ -678,6 +678,12 @@ export class RpcApiType {
         return client.wshRpcCall("readappfile", data, opts);
     }
 
+    // command "readblockfilerange" [call]
+    ReadBlockFileRangeCommand(client: WshClient, data: CommandReadBlockFileRangeData, opts?: RpcOpts): Promise<BlockFileRangeResponse> {
+        if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "readblockfilerange", data, opts);
+        return client.wshRpcCall("readblockfilerange", data, opts);
+    }
+
     // command "recordtevent" [call]
     RecordTEventCommand(client: WshClient, data: TEvent, opts?: RpcOpts): Promise<void> {
         if (this.mockClient) return this.mockClient.mockWshRpcCall(client, "recordtevent", data, opts);

@@ -99,6 +99,7 @@ type WshRpcInterface interface {
 	UpdateWorkspaceTabIdsCommand(ctx context.Context, workspaceId string, tabIds []string) error
 	GetAllBadgesCommand(ctx context.Context) ([]baseds.BadgeEvent, error)
 	GetCmdBlocksCommand(ctx context.Context, data CommandGetCmdBlocksData) ([]*cbtypes.CmdBlock, error)
+	ReadBlockFileRangeCommand(ctx context.Context, data CommandReadBlockFileRangeData) (*BlockFileRangeResponse, error)
 
 	// connection functions
 	ConnStatusCommand(ctx context.Context) ([]ConnStatus, error)
@@ -366,6 +367,18 @@ type CommandGetTempDirData struct {
 type CommandGetCmdBlocksData struct {
 	BlockID string `json:"blockid"`
 	Limit   int    `json:"limit,omitempty"`
+}
+
+type CommandReadBlockFileRangeData struct {
+	BlockID string `json:"blockid"`
+	Name    string `json:"name"`
+	Offset  int64  `json:"offset"`
+	Size    int64  `json:"size"`
+}
+
+type BlockFileRangeResponse struct {
+	Offset int64  `json:"offset"`
+	Data64 string `json:"data64"`
 }
 
 type CommandWriteTempFileData struct {

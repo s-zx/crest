@@ -91,6 +91,20 @@
     margin-bottom: 4px;
 }
 
+.termblocks-row-output {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--foreground);
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin: 4px 0 6px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
 .termblocks-placeholder {
     color: var(--secondary-text);
     font-style: italic;

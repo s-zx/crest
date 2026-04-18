@@ -677,6 +677,12 @@ func ReadAppFileCommand(w *wshutil.WshRpc, data wshrpc.CommandReadAppFileData, o
 	return resp, err
 }
 
+// command "readblockfilerange", wshserver.ReadBlockFileRangeCommand
+func ReadBlockFileRangeCommand(w *wshutil.WshRpc, data wshrpc.CommandReadBlockFileRangeData, opts *wshrpc.RpcOpts) (*wshrpc.BlockFileRangeResponse, error) {
+	resp, err := sendRpcRequestCallHelper[*wshrpc.BlockFileRangeResponse](w, "readblockfilerange", data, opts)
+	return resp, err
+}
+
 // command "recordtevent", wshserver.RecordTEventCommand
 func RecordTEventCommand(w *wshutil.WshRpc, data telemetrydata.TEvent, opts *wshrpc.RpcOpts) error {
 	_, err := sendRpcRequestCallHelper[any](w, "recordtevent", data, opts)
