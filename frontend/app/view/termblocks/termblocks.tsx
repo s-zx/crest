@@ -537,32 +537,21 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
     const altOID = useAtomValue(model.altScreenOIDAtom);
     const scrollRef = React.useRef<HTMLDivElement>(null);
 
-    // Alt-screen mode: a TUI (less/vim/top/…) took over the PTY, so we show
-    // the running block's buffer in a single full-viewport xterm with stdin
-    // enabled.  Keystrokes go straight to the PTY via onData.
-    if (altOID !== "") {
-        const running = blocks.find((b) => b.state === "running") ?? blocks[blocks.length - 1];
-        const bytes = running != null ? outputs[running.oid] ?? new Uint8Array() : new Uint8Array();
-        return (
-            <div className="termblocks-root">
-                <div className="termblocks-altscreen-wrap">
-                    <AltScreenXterm bytes={bytes} onData={(s) => model.sendBytes(s)} />
-                </div>
-            </div>
-        );
-    }
-
     // Only render rows that actually represent a command — a bare "prompt"
     // state is the transient anchor the next OSC C will attach to, with no
     // user-meaningful content yet.
     const visibleBlocks = React.useMemo(() => blocks.filter((b) => b.state !== "prompt"), [blocks]);
     const lastOid = visibleBlocks.length > 0 ? visibleBlocks[visibleBlocks.length - 1].oid : "";
     const lastOutputLen = lastOid && outputs[lastOid] != null ? outputs[lastOid].length : 0;
+    const inAltScreen = altOID !== "";
 
     // Scroll to the bottom whenever the last visible block changes OR its
     // output bytes arrive.  xterm itself lays out across a couple of frames,
     // so we trigger a deferred scroll in addition to the immediate one.
     React.useEffect(() => {
+        if (inAltScreen) {
+            return;
+        }
         const el = scrollRef.current;
         if (el == null) return;
         const toBottom = () => {
@@ -577,7 +566,22 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
             cancelAnimationFrame(raf2);
             clearTimeout(late);
         };
-    }, [lastOid, lastOutputLen, visibleBlocks.length]);
+    }, [lastOid, lastOutputLen, visibleBlocks.length, inAltScreen]);
+
+    // Alt-screen mode: a TUI (less/vim/top/…) took over the PTY, so we show
+    // the running block's buffer in a single full-viewport xterm with stdin
+    // enabled.  Keystrokes go straight to the PTY via onData.
+    if (inAltScreen) {
+        const running = blocks.find((b) => b.state === "running") ?? blocks[blocks.length - 1];
+        const bytes = running != null ? outputs[running.oid] ?? new Uint8Array() : new Uint8Array();
+        return (
+            <div className="termblocks-root">
+                <div className="termblocks-altscreen-wrap">
+                    <AltScreenXterm bytes={bytes} onData={(s) => model.sendBytes(s)} />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="termblocks-root">
