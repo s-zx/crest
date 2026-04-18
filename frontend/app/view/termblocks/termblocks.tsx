@@ -389,6 +389,42 @@ function countNewlines(bytes: Uint8Array): number {
     return n;
 }
 
+// hasMeaningfulOutput returns true only if bytes contain something worth
+// rendering into an xterm.  Pure whitespace (spaces, newlines, carriage
+// returns, tabs) or leftover shell-integration OSC sequences count as
+// "nothing", so commands like `cd`/`export` that write nothing visible
+// don't leave an empty black strip under the cmd line.
+function hasMeaningfulOutput(bytes: Uint8Array): boolean {
+    if (bytes.length === 0) return false;
+    let i = 0;
+    while (i < bytes.length) {
+        const b = bytes[i];
+        // strip OSC: ESC ] … (BEL | ESC \)
+        if (b === 0x1b && i + 1 < bytes.length && bytes[i + 1] === 0x5d) {
+            let j = i + 2;
+            while (j < bytes.length) {
+                if (bytes[j] === 0x07) { j++; break; }
+                if (bytes[j] === 0x1b && j + 1 < bytes.length && bytes[j + 1] === 0x5c) { j += 2; break; }
+                j++;
+            }
+            i = j;
+            continue;
+        }
+        // strip CSI: ESC [ … final
+        if (b === 0x1b && i + 1 < bytes.length && bytes[i + 1] === 0x5b) {
+            let j = i + 2;
+            while (j < bytes.length && (bytes[j] < 0x40 || bytes[j] > 0x7e)) j++;
+            i = j + 1;
+            continue;
+        }
+        if (b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d && b !== 0x1b) {
+            return true;
+        }
+        i++;
+    }
+    return false;
+}
+
 const AltScreenXterm: React.FC<{
     bytes: Uint8Array;
     onData: (s: string) => void;
@@ -538,11 +574,11 @@ const XtermOutput: React.FC<{
             fontSize: 12,
             theme: interactive
                 ? {
-                      background: "#1a1a1a",
+                      background: "rgba(0,0,0,0)",
                       foreground: "#e0e0e0",
                   }
                 : {
-                      background: "#1a1a1a",
+                      background: "rgba(0,0,0,0)",
                       foreground: "#e0e0e0",
                       cursor: "transparent",
                       cursorAccent: "transparent",
@@ -649,7 +685,7 @@ const TermBlockRow: React.FC<{
     const isDone = block.state === "done";
     const isRunning = block.state === "running";
     const isError = isDone && block.exitcode != null && block.exitcode !== 0;
-    const hasOutput = output != null && output.length > 0;
+    const hasOutput = output != null && hasMeaningfulOutput(output);
     const showXterm = hasOutput || isRunning;
     const cwd = shortenCwd(block.cwd ?? fallbackCwd, home);
     const duration = formatDuration(block.durationms);

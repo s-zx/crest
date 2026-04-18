@@ -139,14 +139,17 @@
     margin: 2px 0 6px;
 }
 
-// xterm output — no card background, flows inline with row content.
+// xterm output — no card/background; flows inline with the row like plain
+// text so the command output visually extends the cmd line rather than
+// living in its own panel.
 .termblocks-xterm {
     background: transparent;
     padding: 0;
-    margin: 0;
+    margin: 2px 0 0;
     overflow: hidden;
 
     .xterm {
+        background: transparent !important;
         height: auto;
     }
 
@@ -162,7 +165,12 @@
     }
 
     .xterm-screen {
+        background: transparent !important;
         pointer-events: auto;
+    }
+
+    canvas {
+        background: transparent !important;
     }
 }
 
