@@ -54,6 +54,25 @@
     }
 }
 
+.termblocks-input-interrupt {
+    flex: 0 0 auto;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: #e57373;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    padding: 2px 8px;
+    line-height: 1;
+    opacity: 0.7;
+
+    &:hover {
+        opacity: 1;
+        background: rgba(229, 115, 115, 0.12);
+    }
+}
+
 .termblocks-header {
     font-size: 11px;
     color: var(--secondary-text);

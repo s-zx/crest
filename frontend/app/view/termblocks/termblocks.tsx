@@ -155,13 +155,20 @@ export class TermBlocksViewModel implements ViewModel {
         });
     }
 
-    async submitInput(raw: string) {
-        const line = raw + "\r";
+    async sendBytes(bytes: string) {
         await RpcApi.ControllerInputCommand(TabRpcClient, {
             blockid: this.blockId,
-            inputdata64: stringToBase64(line),
+            inputdata64: stringToBase64(bytes),
         });
+    }
+
+    async submitInput(raw: string) {
+        await this.sendBytes(raw + "\r");
         this.fetchBlocks();
+    }
+
+    sendInterrupt() {
+        void this.sendBytes("\x03");
     }
 
     async fetchBlocks() {
@@ -376,6 +383,12 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
     };
 
     const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.ctrlKey && e.key.toLowerCase() === "c" && !e.metaKey) {
+            e.preventDefault();
+            setValue("");
+            model.sendInterrupt();
+            return;
+        }
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             submit();
@@ -413,10 +426,18 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
                 autoFocus
                 spellCheck={false}
                 autoComplete="off"
-                placeholder="Type a command and press Enter…"
+                placeholder="Type a command and press Enter. Ctrl-C to interrupt."
                 onChange={(e) => setValue(e.target.value)}
                 onKeyDown={onKeyDown}
             />
+            <button
+                type="button"
+                className="termblocks-input-interrupt"
+                title="Send SIGINT (Ctrl-C)"
+                onClick={() => model.sendInterrupt()}
+            >
+                ⊗
+            </button>
         </div>
     );
 };
