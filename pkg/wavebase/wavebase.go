@@ -207,9 +207,9 @@ func EnsureWavePresetsDir() error {
 
 func resolveWaveCachesDir() string {
 	var cacheDir string
-	appBundle := "weft"
+	appBundle := "crest"
 	if IsDevMode() {
-		appBundle = "weft-dev"
+		appBundle = "crest-dev"
 	}
 
 	switch runtime.GOOS {

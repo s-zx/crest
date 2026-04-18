@@ -11,10 +11,10 @@ import { WaveDevVarName, WaveDevViteVarName } from "../frontend/util/isdev";
 import * as keyutil from "../frontend/util/keyutil";
 
 // This is a little trick to ensure that Electron puts all its runtime data into a subdirectory to avoid conflicts with our own data.
-// On macOS, it will store to ~/Library/Application \Support/weft/electron
-// On Linux, it will store to ~/.config/weft/electron
-// On Windows, it will store to %LOCALAPPDATA%/weft/electron
-app.setName("weft/electron");
+// On macOS, it will store to ~/Library/Application \Support/crest/electron
+// On Linux, it will store to ~/.config/crest/electron
+// On Windows, it will store to %LOCALAPPDATA%/crest/electron
+app.setName("crest/electron");
 
 const isDev = !app.isPackaged;
 const isDevVite = isDev && process.env.ELECTRON_RENDERER_URL;
@@ -26,13 +26,13 @@ if (isDevVite) {
     process.env[WaveDevViteVarName] = "1";
 }
 
-const waveDirNamePrefix = "weft";
+const waveDirNamePrefix = "crest";
 const waveDirNameSuffix = isDev ? "dev" : "";
 const waveDirName = `${waveDirNamePrefix}${waveDirNameSuffix ? `-${waveDirNameSuffix}` : ""}`;
 
-const paths = envPaths("weft", { suffix: waveDirNameSuffix });
+const paths = envPaths("crest", { suffix: waveDirNameSuffix });
 
-app.setName(isDev ? "Weft (Dev)" : "Weft");
+app.setName(isDev ? "Crest (Dev)" : "Crest");
 const unamePlatform = process.platform;
 const unameArch: string = process.arch;
 keyutil.setKeyUtilPlatform(unamePlatform);
@@ -47,8 +47,8 @@ export function checkIfRunningUnderARM64Translation(fullConfig: FullConfigType) 
         const dialogOpts: Electron.MessageBoxOptions = {
             type: "warning",
             buttons: ["Dismiss", "Learn More"],
-            title: "Weft has detected a performance issue",
-            message: `Weft is running in ARM64 translation mode which may impact performance.\n\nRecommendation: Download the native ARM64 version from our website for optimal performance.`,
+            title: "Crest has detected a performance issue",
+            message: `Crest is running in ARM64 translation mode which may impact performance.\n\nRecommendation: Download the native ARM64 version from our website for optimal performance.`,
         };
 
         const choice = dialog.showMessageBoxSync(null, dialogOpts);

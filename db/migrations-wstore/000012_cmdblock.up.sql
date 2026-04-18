@@ -1,4 +1,4 @@
--- Weft command-block tracking.
+-- Crest command-block tracking.
 --
 -- Each row is one "command" executed in a terminal block: from the moment the
 -- shell integration emits OSC 16162;A (prompt start) to OSC 16162;D (command

@@ -70,7 +70,7 @@ electron.nativeTheme.themeSource = "dark";
 console.log = log;
 console.log(
     sprintf(
-        "weft-app starting, data_dir=%s, config_dir=%s electronpath=%s gopath=%s arch=%s/%s electron=%s",
+        "crest-app starting, data_dir=%s, config_dir=%s electronpath=%s gopath=%s arch=%s/%s electron=%s",
         waveDataDir,
         waveConfigDir,
         getElectronAppBasePath(),
@@ -81,7 +81,7 @@ console.log(
     )
 );
 if (isDev) {
-    console.log("weft-app WAVETERM_DEV set");
+    console.log("crest-app WAVETERM_DEV set");
 }
 
 function handleWSEvent(evtMsg: WSEventType) {
@@ -279,7 +279,7 @@ electronApp.on("before-quit", (e) => {
             type: "question",
             buttons: ["Cancel", "Quit"],
             title: "Confirm Quit",
-            message: "Are you sure you want to quit Weft?",
+            message: "Are you sure you want to quit Crest?",
             defaultId: 0,
             cancelId: 0,
         });
@@ -381,7 +381,7 @@ async function appMain() {
     const startTs = Date.now();
     const instanceLock = electronApp.requestSingleInstanceLock();
     if (!instanceLock) {
-        console.log("weft-app could not get single-instance-lock, shutting down");
+        console.log("crest-app could not get single-instance-lock, shutting down");
         setUserConfirmedQuit(true);
         electronApp.quit();
         return;

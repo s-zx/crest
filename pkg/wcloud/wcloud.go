@@ -23,7 +23,7 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/wavebase"
 )
 
-// Weft: telemetry is disabled by default. Leaving these endpoints empty means
+// Crest: telemetry is disabled by default. Leaving these endpoints empty means
 // no remote call is attempted even if a user flips `telemetry:enabled` back on.
 const WCloudEndpoint = ""
 const WCloudEndpointVarName = "WCLOUD_ENDPOINT"
