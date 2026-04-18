@@ -168,8 +168,7 @@ export function VTab({
             onMouseLeave={() => onHoverChanged?.(false)}
             className={cn(
                 "group relative flex w-full shrink-0 cursor-pointer items-center pl-4 text-[13px] transition-colors select-none",
-                "whitespace-nowrap",
-                tab.subtitle ? "min-h-[52px]" : "h-[42px]",
+                "whitespace-nowrap min-h-[60px]",
                 active ? "text-primary" : isReordering ? "text-secondary" : "text-secondary hover:text-primary",
                 isDragging && "opacity-50"
             )}
@@ -215,27 +214,33 @@ export function VTab({
                 >
                     {tab.name}
                 </div>
-                {tab.subtitle && (
-                    <div className="flex items-center gap-[6px] text-[10px] text-secondary/80 overflow-hidden whitespace-nowrap">
+                {/*
+                  Metadata row always renders with a reserved 14px min-height
+                  so the tab shape is constant whether or not cwd / branch
+                  / diff info is available. Prevents twitch when data trickles
+                  in after the click/switch.
+                */}
+                <div className="flex items-center gap-[6px] text-[11px] text-secondary/80 overflow-hidden whitespace-nowrap min-h-[14px] leading-tight">
+                    {tab.subtitle ? (
                         <span className="overflow-hidden text-ellipsis">{tab.subtitle}</span>
-                        {tab.gitBranch && (
-                            <span className="inline-flex items-center gap-[3px] shrink-0 text-[#b8f2c0]">
-                                <i className="fa-solid fa-code-branch text-[9px] opacity-80" aria-hidden />
-                                {tab.gitBranch}
-                            </span>
-                        )}
-                        {tab.gitChangedFiles != null && tab.gitChangedFiles > 0 && (
-                            <span className="shrink-0">
-                                {tab.gitAdds != null && tab.gitAdds > 0 && (
-                                    <span className="text-[#4caf50]">+{tab.gitAdds}</span>
-                                )}
-                                {tab.gitDels != null && tab.gitDels > 0 && (
-                                    <span className="text-[#e57373] ml-[3px]">-{tab.gitDels}</span>
-                                )}
-                            </span>
-                        )}
-                    </div>
-                )}
+                    ) : null}
+                    {tab.gitBranch && (
+                        <span className="inline-flex items-center gap-[4px] shrink-0 text-[#b8f2c0]">
+                            <i className="fa-solid fa-code-branch text-[10px] opacity-85" aria-hidden />
+                            {tab.gitBranch}
+                        </span>
+                    )}
+                    {tab.gitChangedFiles != null && tab.gitChangedFiles > 0 && (
+                        <span className="shrink-0">
+                            {tab.gitAdds != null && tab.gitAdds > 0 && (
+                                <span className="text-[#4caf50]">+{tab.gitAdds}</span>
+                            )}
+                            {tab.gitDels != null && tab.gitDels > 0 && (
+                                <span className="text-[#e57373] ml-[3px]">-{tab.gitDels}</span>
+                            )}
+                        </span>
+                    )}
+                </div>
             </div>
             {onClose && (
                 <div
