@@ -9,14 +9,20 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"log"
+	"net/url"
+	"strings"
 	"sync"
 
 	"github.com/wavetermdev/waveterm/pkg/cmdblock/cbtypes"
+	"github.com/wavetermdev/waveterm/pkg/waveobj"
+	"github.com/wavetermdev/waveterm/pkg/wcore"
 	"github.com/wavetermdev/waveterm/pkg/wps"
+	"github.com/wavetermdev/waveterm/pkg/wstore"
 )
 
 var altScreenEnterSeq = []byte("\x1b[?1049h")
 var altScreenExitSeq = []byte("\x1b[?1049l")
+var osc7Prefix = []byte("\x1b]7;")
 
 // Tracker glues the OSC 16162 parser to the cmdblock store for one shell
 // session.  Hook it into a PTY read loop by calling OnBytes each time a chunk
@@ -24,13 +30,14 @@ var altScreenExitSeq = []byte("\x1b[?1049l")
 // MakePromptStarted / MarkCommandSubmitted / MarkCommandDone calls and
 // publishes cmdblock:row + cmdblock:chunk events for live updates.
 type Tracker struct {
-	mu           sync.Mutex
-	blockID      string
-	parser       *Parser
-	currentOID   string
-	state        string // matches the current row's state ("prompt"/"running"/"")
-	shellType    string
-	altScreen    bool
+	mu         sync.Mutex
+	blockID    string
+	parser     *Parser
+	currentOID string
+	state      string // matches the current row's state ("prompt"/"running"/"")
+	shellType  string
+	altScreen  bool
+	lastCwd    string
 }
 
 func MakeTracker(blockID string) *Tracker {
@@ -60,6 +67,70 @@ func (t *Tracker) OnBytes(ctx context.Context, chunk []byte) {
 		t.publishChunk(t.currentOID, chunkStart, chunk)
 	}
 	t.detectAltScreen(chunk)
+	t.detectOsc7(ctx, chunk)
+}
+
+// detectOsc7 scans chunk for the "ESC ] 7 ; file://host/path ST" cwd update
+// sequence most shells emit from their precmd/chpwd hooks. When the URL
+// decodes to a local path, pushes it onto the parent block's meta.cmd:cwd
+// so the frontend status bar / meta line has an accurate cwd even without
+// an xterm-level OSC 7 handler.
+func (t *Tracker) detectOsc7(ctx context.Context, chunk []byte) {
+	for i := 0; i < len(chunk); {
+		idx := bytes.Index(chunk[i:], osc7Prefix)
+		if idx < 0 {
+			return
+		}
+		start := i + idx + len(osc7Prefix)
+		end := -1
+		endLen := 0
+		for j := start; j < len(chunk); j++ {
+			if chunk[j] == 0x07 {
+				end = j
+				endLen = 1
+				break
+			}
+			if chunk[j] == 0x1b && j+1 < len(chunk) && chunk[j+1] == '\\' {
+				end = j
+				endLen = 2
+				break
+			}
+		}
+		if end < 0 {
+			return
+		}
+		payload := string(chunk[start:end])
+		i = end + endLen
+		if path := parseOsc7Path(payload); path != "" && path != t.lastCwd {
+			t.lastCwd = path
+			t.pushCwd(ctx, path)
+		}
+	}
+}
+
+func parseOsc7Path(raw string) string {
+	if !strings.HasPrefix(raw, "file://") {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	if u.Path == "" {
+		return ""
+	}
+	// decoded already by url.Parse
+	return u.Path
+}
+
+func (t *Tracker) pushCwd(ctx context.Context, cwd string) {
+	oref := waveobj.MakeORef(waveobj.OType_Block, t.blockID)
+	meta := waveobj.MetaMapType{"cmd:cwd": cwd}
+	if err := wstore.UpdateObjectMeta(ctx, oref, meta, false); err != nil {
+		log.Printf("cmdblock: update cmd:cwd for %s: %v", t.blockID, err)
+		return
+	}
+	wcore.SendWaveObjUpdate(oref)
 }
 
 // detectAltScreen scans chunk for the DECSET/DECRST 1049 sequences that

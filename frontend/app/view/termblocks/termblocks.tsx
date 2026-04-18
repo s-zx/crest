@@ -452,6 +452,38 @@ const XtermOutput: React.FC<{
         onResizeRef.current = onResize;
     });
 
+    // Forward wheel events to the outer scroll container.  xterm attaches a
+    // wheel listener on its viewport even when scrollback is 0, which makes
+    // scrolling impossible whenever the cursor is hovering a block. We trap
+    // wheel on the wrapper in the capture phase, cancel it, and drive the
+    // nearest scrollable ancestor ourselves.
+    React.useEffect(() => {
+        if (interactive) {
+            return;
+        }
+        const host = containerRef.current;
+        if (host == null) return;
+        const onWheel = (ev: WheelEvent) => {
+            let node: HTMLElement | null = host.parentElement;
+            while (node != null) {
+                const style = window.getComputedStyle(node);
+                if (style.overflowY === "auto" || style.overflowY === "scroll") {
+                    break;
+                }
+                node = node.parentElement;
+            }
+            if (node == null) return;
+            ev.preventDefault();
+            ev.stopPropagation();
+            node.scrollTop += ev.deltaY;
+            if (ev.deltaX) {
+                node.scrollLeft += ev.deltaX;
+            }
+        };
+        host.addEventListener("wheel", onWheel, { capture: true, passive: false });
+        return () => host.removeEventListener("wheel", onWheel, { capture: true });
+    }, [interactive]);
+
     React.useEffect(() => {
         const host = containerRef.current;
         if (host == null) return;

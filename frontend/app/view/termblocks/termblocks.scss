@@ -150,8 +150,19 @@
         height: auto;
     }
 
+    // Kill xterm's internal scrollable viewport: with scrollback=0 there is
+    // nothing to scroll, but xterm still captures wheel events on this layer
+    // and prevents the outer block list from scrolling when the cursor is
+    // over a block.  Disable pointer events on the viewport while keeping the
+    // text layer interactive so selection and click still work.
     .xterm-viewport {
         background: transparent !important;
+        pointer-events: none !important;
+        overflow: hidden !important;
+    }
+
+    .xterm-screen {
+        pointer-events: auto;
     }
 }
 
