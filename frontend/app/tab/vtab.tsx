@@ -167,9 +167,9 @@ export function VTab({
             onMouseEnter={() => onHoverChanged?.(true)}
             onMouseLeave={() => onHoverChanged?.(false)}
             className={cn(
-                "group relative flex w-full shrink-0 cursor-pointer items-center pl-3 text-xs transition-colors select-none",
+                "group relative flex w-full shrink-0 cursor-pointer items-center pl-4 text-[13px] transition-colors select-none",
                 "whitespace-nowrap",
-                tab.subtitle ? "min-h-[44px]" : "h-9",
+                tab.subtitle ? "min-h-[52px]" : "h-[42px]",
                 active ? "text-primary" : isReordering ? "text-secondary" : "text-secondary hover:text-primary",
                 isDragging && "opacity-50"
             )}
@@ -177,14 +177,14 @@ export function VTab({
             {active && (
                 <div
                     className={cn(
-                        "pointer-events-none absolute inset-x-1 inset-y-[4px] rounded-[8px]",
+                        "pointer-events-none absolute inset-x-[6px] inset-y-[5px] rounded-[5px]",
                         "border border-white/25",
                         "bg-white/[0.06]"
                     )}
                 />
             )}
             {!active && !isReordering && (
-                <div className="pointer-events-none absolute inset-x-1 inset-y-[4px] rounded-[8px] bg-transparent transition-colors group-hover:bg-white/[0.05]" />
+                <div className="pointer-events-none absolute inset-x-[6px] inset-y-[5px] rounded-[5px] bg-transparent transition-colors group-hover:bg-white/[0.05]" />
             )}
             <div
                 className={cn(
@@ -197,12 +197,12 @@ export function VTab({
                 flagColor={flagColor}
                 className="mr-1 min-w-[16px] shrink-0 static top-auto left-auto z-auto h-[16px] w-auto translate-y-0 justify-start px-[2px] py-[1px] [&_i]:text-[10px]"
             />
-            <div className={cn("min-w-0 flex-1 flex flex-col justify-center pr-3 gap-[2px]",
-                onClose && !isReordering && "group-hover:pr-6")}>
+            <div className={cn("min-w-0 flex-1 flex flex-col justify-center pr-3 gap-[3px]",
+                onClose && !isReordering && "group-hover:pr-14")}>
                 <div
                     ref={editableRef}
                     className={cn(
-                        "overflow-hidden text-ellipsis whitespace-nowrap",
+                        "overflow-hidden text-ellipsis whitespace-nowrap leading-tight",
                         isEditable && "rounded-[2px] bg-white/15 outline-none px-[3px]"
                     )}
                     contentEditable={isEditable}
@@ -238,20 +238,39 @@ export function VTab({
                 )}
             </div>
             {onClose && (
-                <button
-                    type="button"
+                <div
                     className={cn(
-                        "absolute top-1/2 right-0 shrink-0 -translate-y-1/2 cursor-pointer py-1 pl-1 pr-3 text-secondary transition",
-                        isReordering ? "opacity-0" : "opacity-0 group-hover:opacity-100 hover:text-primary"
+                        "absolute top-1/2 right-2 -translate-y-1/2 flex items-center gap-[2px] transition",
+                        isReordering ? "opacity-0" : "opacity-0 group-hover:opacity-100"
                     )}
-                    onClick={(event) => {
-                        event.stopPropagation();
-                        onClose();
-                    }}
-                    aria-label="Close tab"
                 >
-                    <i className="fa fa-solid fa-xmark" />
-                </button>
+                    {onContextMenu && (
+                        <button
+                            type="button"
+                            className="cursor-pointer rounded-[4px] px-[5px] py-[2px] text-secondary hover:bg-white/10 hover:text-primary transition"
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                onContextMenu(event);
+                            }}
+                            aria-label="Tab options"
+                            title="Tab options"
+                        >
+                            <i className="fa fa-solid fa-ellipsis-vertical text-[12px]" />
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        className="cursor-pointer rounded-[4px] px-[5px] py-[2px] text-secondary hover:bg-white/10 hover:text-primary transition"
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onClose();
+                        }}
+                        aria-label="Close tab"
+                        title="Close tab"
+                    >
+                        <i className="fa fa-solid fa-xmark text-[12px]" />
+                    </button>
+                </div>
             )}
         </div>
     );
