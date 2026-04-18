@@ -835,10 +835,20 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
         }
     };
 
+    const tokens = React.useMemo(() => tokenizeShell(value), [value]);
+
     return (
         <div className="termblocks-input-row">
             <span className="termblocks-input-prompt">›</span>
             <div className="termblocks-input-wrap">
+                <div className="termblocks-input-highlight" aria-hidden>
+                    {tokens.map((t, idx) => (
+                        <span key={idx} className={`tok-${t.kind}`}>
+                            {t.text}
+                        </span>
+                    ))}
+                    {ghost && <span className="tok-ghost">{ghost}</span>}
+                </div>
                 <input
                     ref={inputRef}
                     className="termblocks-input"
@@ -854,12 +864,6 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
                     }}
                     onKeyDown={onKeyDown}
                 />
-                {ghost && (
-                    <span className="termblocks-input-ghost" aria-hidden>
-                        <span className="termblocks-input-ghost-prefix">{value}</span>
-                        <span className="termblocks-input-ghost-suffix">{ghost}</span>
-                    </span>
-                )}
             </div>
             <button
                 type="button"
@@ -867,7 +871,7 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
                 title="Send SIGINT (Ctrl-C)"
                 onClick={() => model.sendInterrupt()}
             >
-                ⊗
+                <i className="fa-solid fa-ban" aria-hidden />
             </button>
         </div>
     );
@@ -971,8 +975,8 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
                     </div>
                 )}
             </div>
-            {runningBlock == null && <TermBlocksInput model={model} />}
             <TermBlocksStatusBar cwd={blockMetaCwd} home={home} gitInfo={gitInfo} />
+            {runningBlock == null && <TermBlocksInput model={model} />}
         </div>
     );
 };
@@ -991,13 +995,13 @@ const TermBlocksStatusBar: React.FC<{
         <div className="termblocks-statusbar">
             {shortCwd && (
                 <span className="termblocks-chip" title={cwd}>
-                    <span className="termblocks-chip-icon">📁</span>
+                    <i className="fa-regular fa-folder termblocks-chip-icon" aria-hidden />
                     {shortCwd}
                 </span>
             )}
             {gitInfo?.isrepo && gitInfo.branch && (
                 <span className="termblocks-chip" title="git branch">
-                    <span className="termblocks-chip-icon"> </span>
+                    <i className="fa-solid fa-code-branch termblocks-chip-icon" aria-hidden />
                     {gitInfo.branch}
                     {gitInfo.ahead ? <span className="termblocks-chip-sub">↑{gitInfo.ahead}</span> : null}
                     {gitInfo.behind ? <span className="termblocks-chip-sub">↓{gitInfo.behind}</span> : null}
@@ -1005,7 +1009,7 @@ const TermBlocksStatusBar: React.FC<{
             )}
             {gitInfo?.isrepo && (gitInfo.changedfiles ?? 0) > 0 && (
                 <span className="termblocks-chip" title="uncommitted changes">
-                    <span className="termblocks-chip-icon">±</span>
+                    <i className="fa-regular fa-file-lines termblocks-chip-icon" aria-hidden />
                     {gitInfo.changedfiles} file{(gitInfo.changedfiles ?? 0) === 1 ? "" : "s"}
                     {gitInfo.additions ? (
                         <span className="termblocks-chip-add"> +{gitInfo.additions}</span>
@@ -1019,3 +1023,88 @@ const TermBlocksStatusBar: React.FC<{
     );
 };
 TermBlocksStatusBar.displayName = "TermBlocksStatusBar";
+
+type ShellToken = { text: string; kind: "cmd" | "flag" | "string" | "var" | "comment" | "op" | "path" | "text" };
+
+// Minimal bash-ish tokenizer for the input line.  Good enough to color
+// the command, flags, quoted strings, variables, comments, and basic
+// shell operators (| && || ; > < >>).  Everything else stays plain.
+function tokenizeShell(input: string): ShellToken[] {
+    const tokens: ShellToken[] = [];
+    let i = 0;
+    let seenFirstWord = false;
+    const isWs = (c: string) => c === " " || c === "\t";
+    const isWordChar = (c: string) =>
+        c !== " " && c !== "\t" && c !== "\"" && c !== "'" && c !== "$" && c !== "#" &&
+        c !== "|" && c !== "&" && c !== ";" && c !== "<" && c !== ">" && c !== "(" && c !== ")";
+    while (i < input.length) {
+        const c = input[i];
+        if (isWs(c)) {
+            let j = i;
+            while (j < input.length && isWs(input[j])) j++;
+            tokens.push({ text: input.slice(i, j), kind: "text" });
+            i = j;
+            continue;
+        }
+        if (c === "#") {
+            tokens.push({ text: input.slice(i), kind: "comment" });
+            break;
+        }
+        if (c === "\"") {
+            let j = i + 1;
+            while (j < input.length && input[j] !== "\"") {
+                if (input[j] === "\\" && j + 1 < input.length) j++;
+                j++;
+            }
+            if (j < input.length) j++;
+            tokens.push({ text: input.slice(i, j), kind: "string" });
+            i = j;
+            seenFirstWord = true;
+            continue;
+        }
+        if (c === "'") {
+            let j = i + 1;
+            while (j < input.length && input[j] !== "'") j++;
+            if (j < input.length) j++;
+            tokens.push({ text: input.slice(i, j), kind: "string" });
+            i = j;
+            seenFirstWord = true;
+            continue;
+        }
+        if (c === "$") {
+            let j = i + 1;
+            if (input[j] === "{") {
+                while (j < input.length && input[j] !== "}") j++;
+                if (j < input.length) j++;
+            } else {
+                while (j < input.length && /[A-Za-z0-9_]/.test(input[j])) j++;
+            }
+            tokens.push({ text: input.slice(i, j), kind: "var" });
+            i = j;
+            continue;
+        }
+        if (c === "|" || c === "&" || c === ";" || c === "<" || c === ">" || c === "(" || c === ")") {
+            let j = i + 1;
+            if ((c === "|" || c === "&" || c === ">") && input[j] === c) j++;
+            tokens.push({ text: input.slice(i, j), kind: "op" });
+            i = j;
+            seenFirstWord = false;
+            continue;
+        }
+        let j = i;
+        while (j < input.length && isWordChar(input[j])) j++;
+        const word = input.slice(i, j);
+        if (!seenFirstWord) {
+            tokens.push({ text: word, kind: "cmd" });
+            seenFirstWord = true;
+        } else if (word.startsWith("-")) {
+            tokens.push({ text: word, kind: "flag" });
+        } else if (word.includes("/") || word.startsWith("~") || word.startsWith(".")) {
+            tokens.push({ text: word, kind: "path" });
+        } else {
+            tokens.push({ text: word, kind: "text" });
+        }
+        i = j;
+    }
+    return tokens;
+}
