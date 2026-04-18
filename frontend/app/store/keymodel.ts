@@ -343,7 +343,7 @@ function globalRefocus() {
 
 function getDefaultNewBlockDef(): BlockDef {
     const adnbAtom = getSettingsKeyAtom("app:defaultnewblock");
-    const adnb = globalStore.get(adnbAtom) ?? "term";
+    const adnb = globalStore.get(adnbAtom) ?? "termblocks";
     if (adnb == "launcher") {
         return {
             meta: {
@@ -351,10 +351,10 @@ function getDefaultNewBlockDef(): BlockDef {
             },
         };
     }
-    // "term", blank, anything else, fall back to terminal
+    const view = adnb === "term" ? "term" : "termblocks";
     const termBlockDef: BlockDef = {
         meta: {
-            view: "term",
+            view,
             controller: "shell",
         },
     };
@@ -363,7 +363,7 @@ function getDefaultNewBlockDef(): BlockDef {
     if (focusedNode != null) {
         const blockAtom = WOS.getWaveObjectAtom<Block>(WOS.makeORef("block", focusedNode.data?.blockId));
         const blockData = globalStore.get(blockAtom);
-        if (blockData?.meta?.view == "term") {
+        if (blockData?.meta?.view == "term" || blockData?.meta?.view == "termblocks") {
             if (blockData?.meta?.["cmd:cwd"] != null) {
                 termBlockDef.meta["cmd:cwd"] = blockData.meta["cmd:cwd"];
             }

@@ -366,11 +366,24 @@ const AltScreenXterm: React.FC<{
 };
 AltScreenXterm.displayName = "AltScreenXterm";
 
-const XtermOutput: React.FC<{ bytes: Uint8Array }> = ({ bytes }) => {
+const HideCursorSeq = "\x1b[?25l";
+
+const XtermOutput: React.FC<{
+    bytes: Uint8Array;
+    interactive?: boolean;
+    onData?: (s: string) => void;
+    onResize?: (rows: number, cols: number) => void;
+}> = ({ bytes, interactive = false, onData, onResize }) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const termRef = React.useRef<Terminal | null>(null);
     const fitRef = React.useRef<FitAddon | null>(null);
     const writtenRef = React.useRef<number>(0);
+    const onDataRef = React.useRef(onData);
+    const onResizeRef = React.useRef(onResize);
+    React.useEffect(() => {
+        onDataRef.current = onData;
+        onResizeRef.current = onResize;
+    });
 
     React.useEffect(() => {
         const host = containerRef.current;
@@ -378,18 +391,23 @@ const XtermOutput: React.FC<{ bytes: Uint8Array }> = ({ bytes }) => {
         const term = new Terminal({
             cols: 120,
             rows: MinXtermRows,
-            disableStdin: true,
+            disableStdin: !interactive,
             convertEol: true,
-            cursorBlink: false,
+            cursorBlink: interactive,
             scrollback: 0,
             fontFamily: "ui-monospace, Menlo, Consolas, monospace",
             fontSize: 12,
-            theme: {
-                background: "#1a1a1a",
-                foreground: "#e0e0e0",
-                cursor: "transparent",
-                cursorAccent: "transparent",
-            },
+            theme: interactive
+                ? {
+                      background: "#1a1a1a",
+                      foreground: "#e0e0e0",
+                  }
+                : {
+                      background: "#1a1a1a",
+                      foreground: "#e0e0e0",
+                      cursor: "transparent",
+                      cursorAccent: "transparent",
+                  },
         });
         const fit = new FitAddon();
         term.loadAddon(fit);
@@ -402,12 +420,34 @@ const XtermOutput: React.FC<{ bytes: Uint8Array }> = ({ bytes }) => {
         termRef.current = term;
         fitRef.current = fit;
         writtenRef.current = 0;
+
+        const subs: { dispose(): void }[] = [];
+        if (interactive) {
+            subs.push(term.onData((data) => onDataRef.current?.(data)));
+            subs.push(term.onResize((s) => onResizeRef.current?.(s.rows, s.cols)));
+            const t = termRef.current;
+            if (t != null) {
+                onResizeRef.current?.(t.rows, t.cols);
+            }
+            term.focus();
+        } else {
+            // belt-and-suspenders: prepend DECTCEM off so any byte-level
+            // shell prompt draw doesn't reveal a stray cursor later.
+            term.write(HideCursorSeq);
+        }
         return () => {
+            for (const s of subs) {
+                try {
+                    s.dispose();
+                } catch {
+                    // ignore
+                }
+            }
             term.dispose();
             termRef.current = null;
             fitRef.current = null;
         };
-    }, []);
+    }, [interactive]);
 
     React.useEffect(() => {
         const term = termRef.current;
@@ -426,6 +466,9 @@ const XtermOutput: React.FC<{ bytes: Uint8Array }> = ({ bytes }) => {
         }
         if (bytes.length < written) {
             term.reset();
+            if (!interactive) {
+                term.write(HideCursorSeq);
+            }
             term.write(bytes);
         } else if (written === 0) {
             term.write(bytes);
@@ -433,16 +476,22 @@ const XtermOutput: React.FC<{ bytes: Uint8Array }> = ({ bytes }) => {
             term.write(bytes.subarray(written));
         }
         writtenRef.current = bytes.length;
-    }, [bytes]);
+    }, [bytes, interactive]);
 
     return <div className="termblocks-xterm" ref={containerRef} />;
 };
 XtermOutput.displayName = "XtermOutput";
 
-const TermBlockRow: React.FC<{ block: CmdBlock; output: Uint8Array | undefined }> = ({ block, output }) => {
+const TermBlockRow: React.FC<{
+    block: CmdBlock;
+    output: Uint8Array | undefined;
+    model: TermBlocksViewModel;
+}> = ({ block, output, model }) => {
     const isDone = block.state === "done";
+    const isRunning = block.state === "running";
     const isError = isDone && block.exitcode != null && block.exitcode !== 0;
     const hasOutput = output != null && output.length > 0;
+    const showXterm = hasOutput || isRunning; // always render for running so stdin is live
 
     return (
         <div className={cn("termblocks-row", `termblocks-row-${block.state}`, isError && "termblocks-row-error")}>
@@ -462,7 +511,14 @@ const TermBlockRow: React.FC<{ block: CmdBlock; output: Uint8Array | undefined }
                     <em className="termblocks-placeholder">(waiting for command)</em>
                 )}
             </div>
-            {hasOutput && <XtermOutput bytes={output} />}
+            {showXterm && (
+                <XtermOutput
+                    bytes={output ?? new Uint8Array()}
+                    interactive={isRunning}
+                    onData={isRunning ? (d) => model.sendBytes(d) : undefined}
+                    onResize={isRunning ? (r, c) => model.sendResize(r, c) : undefined}
+                />
+            )}
             <div className="termblocks-row-offsets">
                 prompt@{block.promptoffset}
                 {block.cmdoffset != null && ` • cmd@${block.cmdoffset}`}
@@ -473,29 +529,6 @@ const TermBlockRow: React.FC<{ block: CmdBlock; output: Uint8Array | undefined }
     );
 };
 TermBlockRow.displayName = "TermBlockRow";
-
-const TermBlocksRunningPanel: React.FC<{ model: TermBlocksViewModel; runningCmd: string | null }> = ({
-    model,
-    runningCmd,
-}) => {
-    return (
-        <div className="termblocks-running-row">
-            <span className="termblocks-running-indicator" aria-hidden />
-            <span className="termblocks-running-label">
-                Running{runningCmd ? `: ${runningCmd}` : "…"}
-            </span>
-            <button
-                type="button"
-                className="termblocks-running-stop"
-                title="Send SIGINT (Ctrl-C)"
-                onClick={() => model.sendInterrupt()}
-            >
-                ⊗ Stop
-            </button>
-        </div>
-    );
-};
-TermBlocksRunningPanel.displayName = "TermBlocksRunningPanel";
 
 const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) => {
     const inputRef = React.useRef<HTMLInputElement>(null);
@@ -653,19 +686,17 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
                             {model.blockId.slice(0, 8)}
                         </div>
                         {visibleBlocks.map((cb) => (
-                            <TermBlockRow key={cb.oid} block={cb} output={outputs[cb.oid]} />
+                            <TermBlockRow
+                                key={cb.oid}
+                                block={cb}
+                                output={outputs[cb.oid]}
+                                model={model}
+                            />
                         ))}
                     </div>
                 )}
             </div>
-            {runningBlock != null ? (
-                <TermBlocksRunningPanel
-                    model={model}
-                    runningCmd={runningBlock.cmd ?? null}
-                />
-            ) : (
-                <TermBlocksInput model={model} />
-            )}
+            {runningBlock == null && <TermBlocksInput model={model} />}
         </div>
     );
 };
