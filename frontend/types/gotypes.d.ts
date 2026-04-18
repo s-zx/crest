@@ -226,6 +226,28 @@ declare global {
         newactivetabid?: string;
     };
 
+    // cbtypes.CmdBlock
+    type CmdBlock = {
+        oid: string;
+        blockid: string;
+        seq: number;
+        state: string;
+        cmd?: string;
+        cwd?: string;
+        shelltype?: string;
+        exitcode?: number;
+        durationms?: number;
+        promptoffset: number;
+        cmdoffset?: number;
+        outputstartoffset?: number;
+        outputendoffset?: number;
+        tspromptns: number;
+        tscmdns?: number;
+        tsdonens?: number;
+        agentsessionid?: string;
+        createdat: number;
+    };
+
     // wshrpc.CommandAuthenticateJobManagerData
     type CommandAuthenticateJobManagerData = {
         jobid: string;
@@ -396,6 +418,12 @@ declare global {
         info: FileInfo;
         byterange?: string;
         streammeta: StreamMeta;
+    };
+
+    // wshrpc.CommandGetCmdBlocksData
+    type CommandGetCmdBlocksData = {
+        blockid: string;
+        limit?: number;
     };
 
     // wshrpc.CommandGetMetaData

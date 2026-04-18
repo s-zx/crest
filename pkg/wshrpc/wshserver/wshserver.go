@@ -27,6 +27,8 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/baseds"
 	"github.com/wavetermdev/waveterm/pkg/blockcontroller"
 	"github.com/wavetermdev/waveterm/pkg/blocklogger"
+	"github.com/wavetermdev/waveterm/pkg/cmdblock"
+	"github.com/wavetermdev/waveterm/pkg/cmdblock/cbtypes"
 	"github.com/wavetermdev/waveterm/pkg/buildercontroller"
 	"github.com/wavetermdev/waveterm/pkg/filebackup"
 	"github.com/wavetermdev/waveterm/pkg/filestore"
@@ -1470,6 +1472,13 @@ func (ws *WshServer) GetTabCommand(ctx context.Context, tabId string) (*waveobj.
 
 func (ws *WshServer) GetAllBadgesCommand(ctx context.Context) ([]baseds.BadgeEvent, error) {
 	return wcore.GetAllBadges(), nil
+}
+
+func (ws *WshServer) GetCmdBlocksCommand(ctx context.Context, data wshrpc.CommandGetCmdBlocksData) ([]*cbtypes.CmdBlock, error) {
+	if data.BlockID == "" {
+		return nil, fmt.Errorf("blockid is required")
+	}
+	return cmdblock.GetByBlockID(ctx, data.BlockID, data.Limit)
 }
 
 func (ws *WshServer) GetSecretsCommand(ctx context.Context, names []string) (map[string]string, error) {

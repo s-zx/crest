@@ -8,6 +8,7 @@ package wshclient
 import (
 	"github.com/wavetermdev/waveterm/pkg/aiusechat/uctypes"
 	"github.com/wavetermdev/waveterm/pkg/baseds"
+	"github.com/wavetermdev/waveterm/pkg/cmdblock/cbtypes"
 	"github.com/wavetermdev/waveterm/pkg/telemetry/telemetrydata"
 	"github.com/wavetermdev/waveterm/pkg/vdom"
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
@@ -415,6 +416,12 @@ func GetBuilderOutputCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpt
 // command "getbuilderstatus", wshserver.GetBuilderStatusCommand
 func GetBuilderStatusCommand(w *wshutil.WshRpc, data string, opts *wshrpc.RpcOpts) (*wshrpc.BuilderStatusData, error) {
 	resp, err := sendRpcRequestCallHelper[*wshrpc.BuilderStatusData](w, "getbuilderstatus", data, opts)
+	return resp, err
+}
+
+// command "getcmdblocks", wshserver.GetCmdBlocksCommand
+func GetCmdBlocksCommand(w *wshutil.WshRpc, data wshrpc.CommandGetCmdBlocksData, opts *wshrpc.RpcOpts) ([]*cbtypes.CmdBlock, error) {
+	resp, err := sendRpcRequestCallHelper[[]*cbtypes.CmdBlock](w, "getcmdblocks", data, opts)
 	return resp, err
 }
 

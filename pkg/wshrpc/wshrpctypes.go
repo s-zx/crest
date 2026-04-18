@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/wavetermdev/waveterm/pkg/aiusechat/uctypes"
 	"github.com/wavetermdev/waveterm/pkg/baseds"
+	"github.com/wavetermdev/waveterm/pkg/cmdblock/cbtypes"
 	"github.com/wavetermdev/waveterm/pkg/telemetry/telemetrydata"
 	"github.com/wavetermdev/waveterm/pkg/vdom"
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
@@ -97,6 +98,7 @@ type WshRpcInterface interface {
 	UpdateTabNameCommand(ctx context.Context, tabId string, newName string) error
 	UpdateWorkspaceTabIdsCommand(ctx context.Context, workspaceId string, tabIds []string) error
 	GetAllBadgesCommand(ctx context.Context) ([]baseds.BadgeEvent, error)
+	GetCmdBlocksCommand(ctx context.Context, data CommandGetCmdBlocksData) ([]*cbtypes.CmdBlock, error)
 
 	// connection functions
 	ConnStatusCommand(ctx context.Context) ([]ConnStatus, error)
@@ -359,6 +361,11 @@ type CommandFileRestoreBackupData struct {
 
 type CommandGetTempDirData struct {
 	FileName string `json:"filename,omitempty"`
+}
+
+type CommandGetCmdBlocksData struct {
+	BlockID string `json:"blockid"`
+	Limit   int    `json:"limit,omitempty"`
 }
 
 type CommandWriteTempFileData struct {
