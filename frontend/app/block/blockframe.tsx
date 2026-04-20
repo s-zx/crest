@@ -15,7 +15,7 @@ import { ErrorBoundary } from "@/element/errorboundary";
 import { NodeModel } from "@/layout/index";
 import { makeORef } from "@/store/wos";
 import * as util from "@/util/util";
-import { makeIconClass } from "@/util/util";
+import { cn, makeIconClass } from "@/util/util";
 import { computeBgStyleFromMeta } from "@/util/waveutil";
 import clsx from "clsx";
 import * as jotai from "jotai";

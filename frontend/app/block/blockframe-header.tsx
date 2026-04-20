@@ -48,13 +48,6 @@ function handleHeaderContextMenu(
                 nodeModel.toggleMagnify();
             },
         },
-        { type: "separator" },
-        {
-            label: "Copy BlockId",
-            click: () => {
-                navigator.clipboard.writeText(blockId);
-            },
-        },
     ];
     const extraItems = viewModel?.getSettingsMenuItems?.();
     if (extraItems && extraItems.length > 0) menu.push({ type: "separator" }, ...extraItems);
@@ -256,10 +249,12 @@ const BlockFrame_Header = ({
             {!useTermHeader && (
                 <>
                     {preIconButton && <IconButton decl={preIconButton} className="block-frame-preicon-button" />}
-                    <div className="block-frame-default-header-iconview">
-                        {viewIconElem}
-                        {viewName && !hideViewName && <div className="block-frame-view-type">{viewName}</div>}
-                    </div>
+                    {(viewIconUnion !== "" || (viewName && !hideViewName)) && (
+                        <div className="block-frame-default-header-iconview">
+                            {viewIconUnion !== "" && viewIconElem}
+                            {viewName && !hideViewName && <div className="block-frame-view-type">{viewName}</div>}
+                        </div>
+                    )}
                 </>
             )}
             {manageConnection && (

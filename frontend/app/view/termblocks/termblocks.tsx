@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ContextMenuModel } from "@/app/store/contextmenu";
-import { getApi, getBlockMetaKeyAtom } from "@/app/store/global";
+import { getApi, getBlockMetaKeyAtom, getSettingsKeyAtom } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { waveEventSubscribeSingle } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
+import { buildTermSettingsMenuItems } from "@/app/view/term/term-settings-menu";
+import { computeTheme } from "@/app/view/term/termutil";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { atoms } from "@/store/global";
 import { base64ToArray, cn, stringToBase64 } from "@/util/util";
@@ -23,17 +25,25 @@ import "./termblocks.scss";
 
 const PollIntervalMs = 10_000; // safety net; live updates arrive via wps events
 const MaxRenderedBytesPerBlock = 256 * 1024;
-const MaxXtermRows = 40;
+// Total xterm buffer capacity per block (viewport + scrollback).  Bytes that
+// scroll off during write land in scrollback and are pulled back when we
+// resize the viewport to match actual content.  Sized well above any realistic
+// block output bounded by MaxRenderedBytesPerBlock.
+const MaxXtermRows = 2000;
 const MinXtermRows = 1;
 
 export class TermBlocksViewModel implements ViewModel {
     viewType: string;
     blockId: string;
 
-    viewIcon = jotai.atom<string>("list");
-    viewName = jotai.atom<string>("Blocks");
+    viewIcon = jotai.atom<string>("");
+    viewName = jotai.atom<string>("");
     noPadding = jotai.atom<boolean>(true);
-    noHeader = jotai.atom<boolean>(true);
+    noHeader = jotai.atom<boolean>(false);
+    viewText!: jotai.Atom<string>;
+    termThemeNameAtom!: jotai.Atom<string>;
+    termTransparencyAtom!: jotai.Atom<number>;
+    termFontSizeAtom!: jotai.Atom<number>;
 
     blocksAtom: jotai.PrimitiveAtom<CmdBlock[]>;
     outputCacheAtom: jotai.PrimitiveAtom<Record<string, Uint8Array>>;
@@ -75,6 +85,30 @@ export class TermBlocksViewModel implements ViewModel {
         }
         const cwdMetaAtom = getBlockMetaKeyAtom(blockId, "cmd:cwd");
         this.blockCwdAtom = jotai.atom((get) => (get(cwdMetaAtom) as string) ?? "");
+        const themeMetaAtom = getBlockMetaKeyAtom(blockId, "term:theme");
+        this.termThemeNameAtom = jotai.atom((get) => (get(themeMetaAtom) as string) ?? "");
+        const transparencyMetaAtom = getBlockMetaKeyAtom(blockId, "term:transparency");
+        this.termTransparencyAtom = jotai.atom((get) => {
+            const v = get(transparencyMetaAtom);
+            return typeof v === "number" ? v : 0;
+        });
+        const fontSizeMetaAtom = getBlockMetaKeyAtom(blockId, "term:fontsize");
+        const fontSizeSettingAtom = getSettingsKeyAtom("term:fontsize");
+        this.termFontSizeAtom = jotai.atom((get) => {
+            const override = get(fontSizeMetaAtom);
+            if (typeof override === "number") return override;
+            const fallback = get(fontSizeSettingAtom);
+            return typeof fallback === "number" ? fallback : 12;
+        });
+        this.viewText = jotai.atom((get) => {
+            const cwd = get(this.blockCwdAtom);
+            const home = get(this.homeAtom);
+            if (!cwd) return "";
+            if (home && (cwd === home || cwd.startsWith(home + "/"))) {
+                return "~" + cwd.slice(home.length);
+            }
+            return cwd;
+        });
         this.gitInfoAtom = jotai.atom<GitInfoResponse | null>(null) as jotai.PrimitiveAtom<GitInfoResponse | null>;
         this.gitPollTimer = setInterval(() => {
             if (!this.disposed) {
@@ -85,21 +119,29 @@ export class TermBlocksViewModel implements ViewModel {
         this.hiddenOidsAtom = jotai.atom<Set<string>>(new Set<string>()) as jotai.PrimitiveAtom<Set<string>>;
         this.historyAtom = jotai.atom<string[]>([]) as jotai.PrimitiveAtom<string[]>;
         this.selectedOidAtom = jotai.atom<string>("") as jotai.PrimitiveAtom<string>;
-        this.loadShellHistory();
-
-        // Ask wavesrv to (re)start the shell controller bound to this block.
-        // The term view does the same thing via termwrap.resyncController; we
-        // don't have a termwrap so we fire it from the model directly.  Without
-        // this call, controller=shell meta alone is not enough — the shell
-        // never actually spawns and input has nowhere to go.
-        RpcApi.ControllerResyncCommand(TabRpcClient, {
-            tabid: globalStore.get(atoms.staticTabId),
-            blockid: blockId,
-        }).catch((e) => {
-            console.warn("termblocks: ControllerResync failed", blockId, e);
+        // Initial RPC work is deferred because TabRpcClient is a live binding
+        // that can still be undefined during module-evaluation / first-render
+        // right after an HMR reload. queueMicrotask runs after module eval is
+        // complete and the binding has been assigned.
+        queueMicrotask(() => {
+            if (this.disposed || TabRpcClient == null) {
+                return;
+            }
+            this.loadShellHistory();
+            // Ask wavesrv to (re)start the shell controller bound to this block.
+            // The term view does the same thing via termwrap.resyncController; we
+            // don't have a termwrap so we fire it from the model directly.  Without
+            // this call, controller=shell meta alone is not enough — the shell
+            // never actually spawns and input has nowhere to go.
+            RpcApi.ControllerResyncCommand(TabRpcClient, {
+                tabid: globalStore.get(atoms.staticTabId),
+                blockid: blockId,
+            }).catch((e) => {
+                console.warn("termblocks: ControllerResync failed", blockId, e);
+            });
+            this.fetchBlocks();
         });
 
-        this.fetchBlocks();
         this.pollTimer = setInterval(() => {
             if (!this.disposed) {
                 this.fetchBlocks();
@@ -395,6 +437,10 @@ export class TermBlocksViewModel implements ViewModel {
         }
         this.unsubs = [];
     }
+
+    getSettingsMenuItems(): ContextMenuItem[] {
+        return buildTermSettingsMenuItems({ blockId: this.blockId });
+    }
 }
 
 // countVisibleLines strips ANSI escapes (CSI + OSC) from bytes, splits on
@@ -467,15 +513,23 @@ const AltScreenXterm: React.FC<{
     bytes: Uint8Array;
     onData: (s: string) => void;
     onResize: (rows: number, cols: number) => void;
-}> = ({ bytes, onData, onResize }) => {
+    theme: any;
+    fontSize: number;
+}> = ({ bytes, onData, onResize, theme, fontSize }) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const termRef = React.useRef<Terminal | null>(null);
     const writtenRef = React.useRef<number>(0);
     const onDataRef = React.useRef(onData);
     const onResizeRef = React.useRef(onResize);
+    // Refs keep the init effect's dep array empty (mount once) while still
+    // letting the reactive update effects see the latest values.
+    const themeRef = React.useRef(theme);
+    const fontSizeRef = React.useRef(fontSize);
     React.useEffect(() => {
         onDataRef.current = onData;
         onResizeRef.current = onResize;
+        themeRef.current = theme;
+        fontSizeRef.current = fontSize;
     });
 
     React.useEffect(() => {
@@ -485,11 +539,8 @@ const AltScreenXterm: React.FC<{
             convertEol: false,
             cursorBlink: true,
             fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-            fontSize: 13,
-            theme: {
-                background: "#000000",
-                foreground: "#e0e0e0",
-            },
+            fontSize: fontSizeRef.current,
+            theme: themeRef.current,
         });
         const fit = new FitAddon();
         term.loadAddon(fit);
@@ -528,6 +579,18 @@ const AltScreenXterm: React.FC<{
     React.useEffect(() => {
         const term = termRef.current;
         if (term == null) return;
+        term.options.theme = theme;
+    }, [theme]);
+
+    React.useEffect(() => {
+        const term = termRef.current;
+        if (term == null) return;
+        term.options.fontSize = fontSize;
+    }, [fontSize]);
+
+    React.useEffect(() => {
+        const term = termRef.current;
+        if (term == null) return;
         const written = writtenRef.current;
         if (bytes.length === written) {
             return;
@@ -554,16 +617,22 @@ const XtermOutput: React.FC<{
     interactive?: boolean;
     onData?: (s: string) => void;
     onResize?: (rows: number, cols: number) => void;
-}> = ({ bytes, interactive = false, onData, onResize }) => {
+    theme: any;
+    fontSize: number;
+}> = ({ bytes, interactive = false, onData, onResize, theme, fontSize }) => {
     const containerRef = React.useRef<HTMLDivElement>(null);
     const termRef = React.useRef<Terminal | null>(null);
     const fitRef = React.useRef<FitAddon | null>(null);
     const writtenRef = React.useRef<number>(0);
     const onDataRef = React.useRef(onData);
     const onResizeRef = React.useRef(onResize);
+    const themeRef = React.useRef(theme);
+    const fontSizeRef = React.useRef(fontSize);
     React.useEffect(() => {
         onDataRef.current = onData;
         onResizeRef.current = onResize;
+        themeRef.current = theme;
+        fontSizeRef.current = fontSize;
     });
 
     // Forward wheel events to the outer scroll container.  xterm attaches a
@@ -601,34 +670,46 @@ const XtermOutput: React.FC<{
     React.useEffect(() => {
         const host = containerRef.current;
         if (host == null) return;
+        const baseTheme = { ...themeRef.current };
+        // Read-only rows hide the cursor so stale prompts don't show a caret.
+        const termTheme = interactive
+            ? baseTheme
+            : { ...baseTheme, cursor: "transparent", cursorAccent: "transparent" };
+        // Design note: xterm is the only authoritative interpreter of terminal
+        // bytes (cursor moves, CR/LF, clear-line, etc.).  Any row-count
+        // heuristic that scans the byte stream before writing will eventually
+        // disagree with what xterm actually renders.
+        //
+        // We keep the viewport tiny initially but give xterm a large scrollback
+        // so bytes that scroll off during write are preserved, not dropped.
+        // After the write completes, sizeToContent() grows the viewport to
+        // baseY+cursorY (xterm pulls the scrolled-off rows back into view),
+        // which is the authoritative "rows actually used".
         const term = new Terminal({
             cols: 120,
             rows: MinXtermRows,
             disableStdin: !interactive,
             convertEol: true,
             cursorBlink: interactive,
-            scrollback: 0,
+            scrollback: MaxXtermRows,
             fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-            fontSize: 12,
-            theme: interactive
-                ? {
-                      background: "rgba(0,0,0,0)",
-                      foreground: "#e0e0e0",
-                  }
-                : {
-                      background: "rgba(0,0,0,0)",
-                      foreground: "#e0e0e0",
-                      cursor: "transparent",
-                      cursorAccent: "transparent",
-                  },
+            fontSize: fontSizeRef.current,
+            theme: termTheme,
         });
         const fit = new FitAddon();
         term.loadAddon(fit);
         term.open(host);
+        // Take cols from the container, never rows: fit.fit() would clamp rows
+        // to the measured container height, which is fragile before content
+        // has laid out (zero-height host → rows→1 → write-time overflow).
+        // sizeToContent() is the authority on rows.
         try {
-            fit.fit();
+            const proposed = fit.proposeDimensions();
+            if (proposed?.cols && proposed.cols > 0) {
+                term.resize(Math.max(20, proposed.cols), term.rows);
+            }
         } catch {
-            // container has zero width on first paint — defaults are fine
+            // container not yet measured — default cols=120 is fine
         }
         termRef.current = term;
         fitRef.current = fit;
@@ -665,8 +746,38 @@ const XtermOutput: React.FC<{
     React.useEffect(() => {
         const term = termRef.current;
         if (term == null) return;
-        const visible = countVisibleLines(bytes);
-        const wantRows = Math.min(MaxXtermRows, Math.max(MinXtermRows, visible));
+        const t = interactive
+            ? theme
+            : { ...theme, cursor: "transparent", cursorAccent: "transparent" };
+        term.options.theme = t;
+    }, [theme, interactive]);
+
+    // Resize the viewport to exactly match what xterm has rendered.
+    //
+    // Non-interactive (done) blocks: size rows to content only — absY +
+    // (cursorX==0 ? 0 : 1) drops the phantom row that a trailing \n creates.
+    // Then scrollToTop so the viewport starts at line 1 rather than xterm's
+    // default bottom-anchored view (which would omit the first lines when
+    // content had to scroll off into scrollback during write).
+    //
+    // Interactive (running) blocks: size rows to the entire buffer length
+    // (= content + phantom cursor row).  The phantom is where the next
+    // write will land, so showing it is correct for a live shell.  We do
+    // NOT scroll to top — xterm's default bottom-anchor keeps newest
+    // output visible as it streams in, and scrollToTop would freeze the
+    // viewport at the start of the run.
+    const sizeToContent = React.useCallback(() => {
+        const term = termRef.current;
+        if (term == null) return;
+        const buf = term.buffer.active;
+        let wantRows: number;
+        if (interactive) {
+            wantRows = buf.length;
+        } else {
+            const absY = buf.baseY + buf.cursorY;
+            wantRows = buf.cursorX === 0 ? absY : absY + 1;
+        }
+        wantRows = Math.min(MaxXtermRows, Math.max(MinXtermRows, wantRows));
         if (term.rows !== wantRows) {
             try {
                 term.resize(term.cols, wantRows);
@@ -674,23 +785,83 @@ const XtermOutput: React.FC<{
                 // ignore
             }
         }
+        if (!interactive) {
+            try {
+                term.scrollToTop();
+            } catch {
+                // ignore
+            }
+        }
+    }, [interactive]);
+
+    React.useEffect(() => {
+        const term = termRef.current;
+        if (term == null) return;
+        term.options.fontSize = fontSize;
+        // Font size changes change char width → re-derive cols from the
+        // container, but keep rows bound to the content (don't let fit.fit()
+        // shrink rows to the container height).
+        try {
+            const proposed = fitRef.current?.proposeDimensions();
+            if (proposed?.cols && proposed.cols > 0) {
+                const newCols = Math.max(20, proposed.cols);
+                if (newCols !== term.cols) {
+                    term.resize(newCols, term.rows);
+                    sizeToContent();
+                }
+            }
+        } catch {
+            // container not yet measured
+        }
+    }, [fontSize, sizeToContent]);
+
+    React.useEffect(() => {
+        const term = termRef.current;
+        if (term == null) return;
         const written = writtenRef.current;
         if (bytes.length === written) {
+            // No new bytes — still size in case interactivity flipped and we
+            // need to re-measure with the current theme/cursor settings.
+            sizeToContent();
             return;
         }
         if (bytes.length < written) {
             term.reset();
-            if (!interactive) {
-                term.write(HideCursorSeq);
-            }
-            term.write(bytes);
+            if (!interactive) term.write(HideCursorSeq);
+            writtenRef.current = 0;
+            term.write(bytes, sizeToContent);
         } else if (written === 0) {
-            term.write(bytes);
+            term.write(bytes, sizeToContent);
         } else {
-            term.write(bytes.subarray(written));
+            term.write(bytes.subarray(written), sizeToContent);
         }
         writtenRef.current = bytes.length;
-    }, [bytes, interactive]);
+    }, [bytes, interactive, sizeToContent]);
+
+    // Re-derive cols when the container resizes (panel drag, sidebar toggle).
+    // xterm reflows wrapped lines at the new width; sizeToContent then picks
+    // up the (possibly changed) row count.
+    React.useEffect(() => {
+        const host = containerRef.current;
+        if (host == null) return;
+        const ro = new ResizeObserver(() => {
+            const term = termRef.current;
+            const fit = fitRef.current;
+            if (term == null || fit == null) return;
+            try {
+                const proposed = fit.proposeDimensions();
+                if (!proposed?.cols || proposed.cols <= 0) return;
+                const newCols = Math.max(20, proposed.cols);
+                if (newCols === term.cols) return;
+                term.resize(newCols, term.rows);
+                sizeToContent();
+            } catch {
+                // ignore
+            }
+        });
+        ro.observe(host);
+        return () => ro.disconnect();
+    }, [sizeToContent]);
 
     return <div className="termblocks-xterm" ref={containerRef} />;
 };
@@ -742,7 +913,9 @@ const TermBlockRow: React.FC<{
     home: string;
     gitInfo: GitInfoResponse | null;
     selected: boolean;
-}> = ({ block, output, model, fallbackCwd, home, gitInfo, selected }) => {
+    theme: any;
+    fontSize: number;
+}> = ({ block, output, model, fallbackCwd, home, gitInfo, selected, theme, fontSize }) => {
     const isDone = block.state === "done";
     const isRunning = block.state === "running";
     const isError = isDone && block.exitcode != null && block.exitcode !== 0;
@@ -874,6 +1047,8 @@ const TermBlockRow: React.FC<{
                     interactive={isRunning}
                     onData={isRunning ? (d) => model.sendBytes(d) : undefined}
                     onResize={isRunning ? (r, c) => model.sendResize(r, c) : undefined}
+                    theme={theme}
+                    fontSize={fontSize}
                 />
             )}
         </div>
@@ -1018,6 +1193,14 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
     const home = useAtomValue(model.homeAtom);
     const gitInfo = useAtomValue(model.gitInfoAtom);
     const selectedOid = useAtomValue(model.selectedOidAtom);
+    const fullConfig = useAtomValue(atoms.fullConfigAtom);
+    const themeName = useAtomValue(model.termThemeNameAtom);
+    const transparency = useAtomValue(model.termTransparencyAtom);
+    const fontSize = useAtomValue(model.termFontSizeAtom);
+    const [termTheme] = React.useMemo(
+        () => computeTheme(fullConfig, themeName, transparency),
+        [fullConfig, themeName, transparency]
+    );
     const scrollRef = React.useRef<HTMLDivElement>(null);
 
     React.useEffect(() => {
@@ -1088,6 +1271,8 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
                         bytes={bytes}
                         onData={(s) => model.sendBytes(s)}
                         onResize={(r, c) => model.sendResize(r, c)}
+                        theme={termTheme}
+                        fontSize={fontSize}
                     />
                 </div>
             </div>
@@ -1128,6 +1313,8 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
                                 home={home}
                                 gitInfo={gitInfo}
                                 selected={cb.oid === selectedOid}
+                                theme={termTheme}
+                                fontSize={fontSize}
                             />
                         ))}
                     </div>
