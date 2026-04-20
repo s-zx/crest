@@ -66,14 +66,13 @@ const Popover = memo(
                 offset = 3;
             }
 
-            middleware ??= [];
-            middleware.push(offsetMiddleware(offset));
+            const effectiveMiddleware = [...(middleware ?? []), offsetMiddleware(offset)];
 
             const { refs, floatingStyles, context } = useFloating({
                 placement,
                 open: isOpen,
                 onOpenChange: handleOpenChange,
-                middleware: middleware,
+                middleware: effectiveMiddleware,
                 whileElementsMounted: autoUpdate,
             });
 

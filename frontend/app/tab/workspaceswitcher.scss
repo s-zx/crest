@@ -3,16 +3,14 @@
 
 .workspace-switcher-button {
     display: flex;
-    height: 22px;
-    padding: 0px 12px;
-    justify-content: flex-end;
+    height: 28px;
+    width: 28px;
+    padding: 0;
+    justify-content: center;
     align-items: center;
-    gap: 12px;
     border-radius: 6px;
-    margin-right: 6px;
-    margin-bottom: 4px;
     box-sizing: border-box;
-    background-color: rgb(from var(--main-text-color) r g b / 0.1) !important;
+    background-color: rgb(from var(--main-text-color) r g b / 0.08) !important;
 
     &:hover {
         background-color: rgb(from var(--main-text-color) r g b / 0.14) !important;

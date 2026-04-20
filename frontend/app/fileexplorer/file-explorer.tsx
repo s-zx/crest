@@ -3,7 +3,7 @@
 
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { useAtomValue } from "jotai";
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect } from "react";
 import { focusedBlockCwdAtom, getCachedHome } from "./file-explorer-atoms";
 import { FileExplorerModel } from "./file-explorer-model";
 import { FileExplorerTree } from "./file-explorer-tree";
@@ -29,33 +29,8 @@ export const FileExplorer = memo(() => {
     const root = useAtomValue(model.rootAtom);
     const { tabId, blockId, cwd } = useAtomValue(focusedBlockCwdAtom);
 
-    const prevTabIdRef = useRef<string | null>(null);
-    const prevBlockIdRef = useRef<string | null>(null);
-
     useEffect(() => {
-        const isFirstMount = prevTabIdRef.current === null;
-        const tabChanged = tabId !== prevTabIdRef.current;
-        const sameBlock = blockId === prevBlockIdRef.current;
-
-        prevTabIdRef.current = tabId;
-        prevBlockIdRef.current = blockId;
-
         if (!cwd) return;
-
-        if (isFirstMount || tabChanged) {
-            // First mount or tab switch → follow the new tab's terminal cwd.
-            if (cwd !== model.getRootNow()) model.setRoot(cwd);
-            return;
-        }
-
-        if (!sameBlock) {
-            // Same tab, different block (e.g. terminal + preview side-by-side)
-            // → keep root unchanged.
-            return;
-        }
-
-        // Same tab, same block, cwd changed (cd / pushd / popd / any shell cwd change)
-        // → update immediately.
         if (cwd !== model.getRootNow()) model.setRoot(cwd);
     }, [tabId, blockId, cwd]);
 

@@ -1,0 +1,15 @@
+// Copyright 2026, Command Line Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+.topbar-traffic-spacer {
+    flex-shrink: 0;
+    width: 74px;
+
+    &[data-tahoe="1"] {
+        width: 80px;
+    }
+}
+
+html[data-fullscreen="1"] .topbar-traffic-spacer {
+    width: 0;
+}

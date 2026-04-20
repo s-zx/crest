@@ -12,6 +12,7 @@ import {
 } from "@/element/expandablemenu";
 import { Popover, PopoverButton, PopoverContent } from "@/element/popover";
 import { fireAndForget, makeIconClass, useAtomValueSafe } from "@/util/util";
+import { flip, shift } from "@floating-ui/react";
 import clsx from "clsx";
 import { atom, PrimitiveAtom, useAtom, useAtomValue, useSetAtom } from "jotai";
 import { splitAtom } from "jotai/utils";
@@ -109,7 +110,8 @@ const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
     return (
         <Popover
             className="workspace-switcher-popover"
-            placement="bottom-start"
+            placement="bottom-end"
+            middleware={[flip(), shift({ padding: 8 })]}
             onDismiss={() => setEditingWorkspace(null)}
             ref={ref}
         >
@@ -133,14 +135,7 @@ const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
                 </OverlayScrollbarsComponent>
 
                 <div className="actions">
-                    {isActiveWorkspaceSaved ? (
-                        <ExpandableMenuItem onClick={() => env.electron.createWorkspace()}>
-                            <ExpandableMenuItemLeftElement>
-                                <i className="fa-sharp fa-solid fa-plus"></i>
-                            </ExpandableMenuItemLeftElement>
-                            <div className="content">Create new workspace</div>
-                        </ExpandableMenuItem>
-                    ) : (
+                    {!isActiveWorkspaceSaved && (
                         <ExpandableMenuItem onClick={() => saveWorkspace()}>
                             <ExpandableMenuItemLeftElement>
                                 <i className="fa-sharp fa-solid fa-floppy-disk"></i>
@@ -148,6 +143,12 @@ const WorkspaceSwitcher = forwardRef<HTMLDivElement>((_, ref) => {
                             <div className="content">Save workspace</div>
                         </ExpandableMenuItem>
                     )}
+                    <ExpandableMenuItem onClick={() => env.electron.createWorkspace()}>
+                        <ExpandableMenuItemLeftElement>
+                            <i className="fa-sharp fa-solid fa-plus"></i>
+                        </ExpandableMenuItemLeftElement>
+                        <div className="content">Create new workspace</div>
+                    </ExpandableMenuItem>
                 </div>
             </PopoverContent>
         </Popover>

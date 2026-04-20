@@ -259,20 +259,14 @@ export class WaveBrowserWindow extends BaseWindow {
                 return;
             }
             console.log("enter-full-screen event", this.getContentBounds());
-            const tabView = this.activeTabView;
-            if (tabView) {
-                tabView.webContents.send("fullscreen-change", true);
-            }
+            this.broadcastFullScreenState(true);
             this.activeTabView?.positionTabOnScreen(this.getContentBounds());
         });
         this.on("leave-full-screen", async () => {
             if (this.isDestroyed()) {
                 return;
             }
-            const tabView = this.activeTabView;
-            if (tabView) {
-                tabView.webContents.send("fullscreen-change", false);
-            }
+            this.broadcastFullScreenState(false);
             this.activeTabView?.positionTabOnScreen(this.getContentBounds());
         });
         this.on("focus", () => {
@@ -496,6 +490,7 @@ export class WaveBrowserWindow extends BaseWindow {
             tabView.webContents.send("wave-init", tabView.savedInitOpts); // reinit
             this.finalizePositioning();
         }
+        this.broadcastFullScreenState(this.isFullScreen());
 
         // something is causing the new tab to lose focus so it requires manual refocusing
         tabView.webContents.focus();
@@ -522,6 +517,19 @@ export class WaveBrowserWindow extends BaseWindow {
                 continue;
             }
             tabView?.positionTabOffScreen(curBounds);
+        }
+    }
+
+    // Broadcasts fullscreen state to all loaded tab views by directly setting a
+    // DOM data attribute in each renderer. Avoids the unreliable per-tab atom +
+    // IPC-subscription path: CSS reads html[data-fullscreen="1"] and stays in
+    // sync regardless of when each tab's React tree mounts.
+    broadcastFullScreenState(isFullScreen: boolean) {
+        const js = `document.documentElement.dataset.fullscreen = ${JSON.stringify(isFullScreen ? "1" : "0")}`;
+        for (const tabView of this.allLoadedTabViews.values()) {
+            if (tabView?.webContents && !tabView.webContents.isDestroyed()) {
+                tabView.webContents.executeJavaScript(js).catch(() => {});
+            }
         }
     }
 
@@ -823,12 +831,13 @@ ipcMain.on("delete-workspace", (event, workspaceId) => {
 
         const _workspaceHasWindow = !!workspaceList.find((wse) => wse.workspaceid === workspaceId)?.windowid;
 
-        const choice = dialog.showMessageBoxSync(this, {
-            type: "question",
+        const dialogOpts = {
+            type: "question" as const,
             buttons: ["Cancel", "Delete Workspace"],
             title: "Confirm",
             message: `Deleting workspace will also delete its contents.\n\nContinue?`,
-        });
+        };
+        const choice = ww ? dialog.showMessageBoxSync(ww, dialogOpts) : dialog.showMessageBoxSync(dialogOpts);
         if (choice === 0) {
             console.log("user cancelled workspace delete", workspaceId, ww?.waveWindowId);
             return;

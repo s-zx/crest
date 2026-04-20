@@ -537,6 +537,14 @@ function registerGlobalKeys() {
         createTab();
         return true;
     });
+    globalKeyMap.set("Cmd:k", () => {
+        if (modalsModel.isModalOpen("CommandPaletteModal")) {
+            modalsModel.popModal();
+        } else {
+            modalsModel.pushModal("CommandPaletteModal");
+        }
+        return true;
+    });
     globalKeyMap.set("Cmd:w", () => {
         genericClose();
         return true;
@@ -783,13 +791,20 @@ export {
     appHandleKeyDown,
     disableGlobalKeybindings,
     enableGlobalKeybindings,
+    genericClose,
     getSimpleControlShiftAtom,
     globalRefocus,
     globalRefocusWithTimeout,
+    handleCmdN,
+    handleSplitHorizontal,
+    handleSplitVertical,
     registerBuilderGlobalKeys,
     registerControlShiftStateUpdateHandler,
     registerElectronReinjectKeyHandler,
     registerGlobalKeys,
+    simpleCloseStaticTab,
+    switchBlockInDirection,
+    switchTab,
     tryReinjectKey,
     unsetControlShift,
     uxCloseBlock,

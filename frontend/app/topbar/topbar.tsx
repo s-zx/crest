@@ -4,19 +4,16 @@
 import { Tooltip } from "@/app/element/tooltip";
 import { NotificationsPanel } from "@/app/notifications/notifications-panel";
 import { NotificationsModel } from "@/app/notifications/notifications-model";
-import { UserPanel } from "@/app/github/github-panels";
 import { GitHubModel } from "@/app/github/github-model";
-import { atoms } from "@/app/store/global";
+import { modalsModel } from "@/app/store/modalmodel";
 import { WorkspaceSwitcher } from "@/app/tab/workspaceswitcher";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
 import { cn } from "@/util/util";
 import { isMacOS, isMacOSTahoeOrLater } from "@/util/platformutil";
 import { FloatingPortal, flip, offset, shift, useClick, useDismiss, useFloating, useInteractions } from "@floating-ui/react";
 import { useAtomValue } from "jotai";
-import { memo, useRef } from "react";
-
-const MacOSTrafficLightsWidth = 74;
-const MacOSTahoeTrafficLightsWidth = 80;
+import { memo } from "react";
+import "./topbar.scss";
 
 // ---- Generic icon button ----
 type ToolbarButtonProps = {
@@ -96,12 +93,8 @@ PanelAnchor.displayName = "PanelAnchor";
 // ---- Right panel buttons ----
 const RightPanelButtons = memo(() => {
     const layoutModel = WorkspaceLayoutModel.getInstance();
-    // GitHubModel / NotificationsModel instances are cheap to create (constructor
-    // does NO network calls, NO WPS subscriptions). Heavy work is deferred to the
-    // first time the user opens the panel.
     const ghModel = GitHubModel.getInstance();
     const notifModel = NotificationsModel.getInstance();
-    const ghUser = useAtomValue(ghModel.userAtom);
     const ghActivePanel = useAtomValue(ghModel.activePanelAtom);
     const notifUnread = useAtomValue(notifModel.unreadCountAtom);
     const codeReviewVisible = useAtomValue(layoutModel.codeReviewVisibleAtom);
@@ -130,32 +123,8 @@ const RightPanelButtons = memo(() => {
                 />
             </PanelAnchor>
 
-            <div className="w-px h-5 bg-white/10 mx-1" />
-
-            {/* User: GitHub account popover */}
-            <PanelAnchor
-                isOpen={ghActivePanel === "user"}
-                onOpenChange={(open) => ghModel.togglePanel(open ? "user" : null)}
-                panel={<UserPanel />}
-            >
-                {ghUser ? (
-                    <div
-                        className={cn(
-                            "flex items-center justify-center h-7 w-7 rounded-md cursor-pointer transition-colors",
-                            ghActivePanel === "user" ? "bg-white/10 ring-1 ring-accent/60" : "hover:bg-white/5"
-                        )}
-                        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-                    >
-                        <img src={ghUser.avatar_url} alt={ghUser.login} className="w-5 h-5 rounded-full" />
-                    </div>
-                ) : (
-                    <ToolbarButton
-                        icon="fa-user"
-                        label="GitHub Account"
-                        active={ghActivePanel === "user"}
-                    />
-                )}
-            </PanelAnchor>
+            {/* Workspace switcher */}
+            <WorkspaceSwitcher />
         </>
     );
 });
@@ -197,7 +166,7 @@ const SearchTrigger = memo(() => (
         type="button"
         className="flex items-center gap-2 h-7 w-full max-w-[400px] px-3 rounded-md bg-white/5 text-[12px] text-secondary hover:bg-white/10 hover:text-primary transition-colors cursor-pointer"
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        onClick={() => console.log("command palette — coming soon")}
+        onClick={() => modalsModel.isModalOpen("CommandPaletteModal") ? modalsModel.popModal() : modalsModel.pushModal("CommandPaletteModal")}
     >
         <i className="fa fa-solid fa-magnifying-glass text-[11px]" />
         <span className="flex-1 text-left">Search files, commands...</span>
@@ -208,29 +177,23 @@ SearchTrigger.displayName = "SearchTrigger";
 
 // ---- TopBar ----
 export const TopBar = memo(() => {
-    const isFullScreen = useAtomValue(atoms.isFullScreen);
-    const workspaceSwitcherRef = useRef<HTMLDivElement>(null);
     const mac = isMacOS();
-    const trafficLightsWidth = isMacOSTahoeOrLater() ? MacOSTahoeTrafficLightsWidth : MacOSTrafficLightsWidth;
+    const tahoe = isMacOSTahoeOrLater();
 
     return (
         <div
             className="flex items-center h-9 shrink-0 w-full border-b border-white/5 select-none"
             style={{ WebkitAppRegion: "drag", backdropFilter: "blur(20px)", background: "rgba(0,0,0,0.35)" } as React.CSSProperties}
         >
-            {mac && !isFullScreen && <div className="shrink-0" style={{ width: trafficLightsWidth }} />}
+            {mac && <div className="topbar-traffic-spacer" data-tahoe={tahoe ? "1" : "0"} />}
 
-            {/* Left: sidebar + explorer toggles + workspace switcher */}
+            {/* Left: sidebar + explorer toggles */}
             <div
                 className="flex items-center gap-1 shrink-0 pl-1"
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
             >
                 <VTabToggleButton />
                 <FileExplorerToggleButton />
-                <div className="w-px h-5 bg-white/10 mx-1" />
-                <Tooltip content="Workspace Switcher" placement="bottom" hideOnClick divRef={workspaceSwitcherRef} divClassName="flex items-center">
-                    <WorkspaceSwitcher />
-                </Tooltip>
             </div>
 
             {/* Middle: search */}
@@ -238,7 +201,7 @@ export const TopBar = memo(() => {
                 <SearchTrigger />
             </div>
 
-            {/* Right: panels */}
+            {/* Right: panels + workspace switcher */}
             <div
                 className="flex items-center gap-0.5 shrink-0 pr-2"
                 style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
