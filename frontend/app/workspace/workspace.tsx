@@ -118,17 +118,41 @@ const WorkspaceElem = memo(() => {
                             </div>
                         </Panel>
                         <PanelResizeHandle className={feHandleClass} />
-                        <Panel order={2} defaultSize={contentInitialPct}>
+                        <Panel order={2} defaultSize={contentInitialPct} className="overflow-hidden flex flex-col">
                             {tabId === "" ? (
                                 <CenteredDiv>No Active Tab</CenteredDiv>
                             ) : (
-                                <div className="relative flex flex-row h-full overflow-hidden">
-                                    <TabContent key={tabId} tabId={tabId} noTopPadding={showLeftTabBar && isMacOS()} />
-                                    {codeReviewVisible && (
-                                        <div
-                                            className="absolute top-0 right-0 h-full z-10 transition-[width] duration-200"
-                                            style={{ width: codeReviewWide ? "100%" : 380 }}
+                                <div className="relative flex-1 min-h-0 w-full">
+                                    <PanelGroup direction="horizontal" className="h-full w-full">
+                                        <Panel
+                                            id="tab-content"
+                                            order={0}
+                                            defaultSize={codeReviewVisible && !codeReviewWide ? 70 : 100}
+                                            minSize={30}
                                         >
+                                            <div className="relative flex flex-row w-full h-full overflow-hidden">
+                                                <TabContent key={tabId} tabId={tabId} noTopPadding={showLeftTabBar && isMacOS()} />
+                                            </div>
+                                        </Panel>
+                                        {codeReviewVisible && !codeReviewWide && (
+                                            <>
+                                                <PanelResizeHandle className="bg-transparent hover:bg-zinc-500/20 transition-colors w-0.5" />
+                                                <Panel
+                                                    id="code-review"
+                                                    order={1}
+                                                    defaultSize={30}
+                                                    minSize={20}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="w-full h-full overflow-hidden">
+                                                        <GitReviewSidebar />
+                                                    </div>
+                                                </Panel>
+                                            </>
+                                        )}
+                                    </PanelGroup>
+                                    {codeReviewVisible && codeReviewWide && (
+                                        <div className="absolute inset-0 z-10 backdrop-blur-xl bg-black/30">
                                             <GitReviewSidebar />
                                         </div>
                                     )}
