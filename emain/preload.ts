@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("api", {
     getAboutModalDetails: () => ipcRenderer.sendSync("get-about-modal-details"),
     getWebviewPreload: () => ipcRenderer.sendSync("get-webview-preload"),
     getZoomFactor: () => ipcRenderer.sendSync("get-zoom-factor"),
+    getIsFullScreen: () => ipcRenderer.sendSync("get-is-full-screen"),
     openNewWindow: () => ipcRenderer.send("open-new-window"),
     showWorkspaceAppMenu: (workspaceId) => ipcRenderer.send("workspace-appmenu-show", workspaceId),
     showBuilderAppMenu: (builderId) => ipcRenderer.send("builder-appmenu-show", builderId),

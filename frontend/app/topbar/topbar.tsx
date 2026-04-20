@@ -5,6 +5,7 @@ import { Tooltip } from "@/app/element/tooltip";
 import { NotificationsPanel } from "@/app/notifications/notifications-panel";
 import { NotificationsModel } from "@/app/notifications/notifications-model";
 import { GitHubModel } from "@/app/github/github-model";
+import { atoms } from "@/app/store/global";
 import { modalsModel } from "@/app/store/modalmodel";
 import { WorkspaceSwitcher } from "@/app/tab/workspaceswitcher";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
@@ -179,13 +180,14 @@ SearchTrigger.displayName = "SearchTrigger";
 export const TopBar = memo(() => {
     const mac = isMacOS();
     const tahoe = isMacOSTahoeOrLater();
+    const isFullScreen = useAtomValue(atoms.isFullScreen);
 
     return (
         <div
             className="flex items-center h-9 shrink-0 w-full border-b border-white/5 select-none"
             style={{ WebkitAppRegion: "drag", backdropFilter: "blur(20px)", background: "rgba(0,0,0,0.35)" } as React.CSSProperties}
         >
-            {mac && <div className="topbar-traffic-spacer" data-tahoe={tahoe ? "1" : "0"} />}
+            {mac && !isFullScreen && <div className="topbar-traffic-spacer" data-tahoe={tahoe ? "1" : "0"} />}
 
             {/* Left: sidebar + explorer toggles */}
             <div

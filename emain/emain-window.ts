@@ -490,7 +490,6 @@ export class WaveBrowserWindow extends BaseWindow {
             tabView.webContents.send("wave-init", tabView.savedInitOpts); // reinit
             this.finalizePositioning();
         }
-        this.broadcastFullScreenState(this.isFullScreen());
 
         // something is causing the new tab to lose focus so it requires manual refocusing
         tabView.webContents.focus();
@@ -520,15 +519,13 @@ export class WaveBrowserWindow extends BaseWindow {
         }
     }
 
-    // Broadcasts fullscreen state to all loaded tab views by directly setting a
-    // DOM data attribute in each renderer. Avoids the unreliable per-tab atom +
-    // IPC-subscription path: CSS reads html[data-fullscreen="1"] and stays in
-    // sync regardless of when each tab's React tree mounts.
+    // Broadcasts fullscreen state to all loaded tab views. Each tab's renderer
+    // has its own atom store; enter/leave-full-screen only reaches the active
+    // tab otherwise, leaving other tabs stale.
     broadcastFullScreenState(isFullScreen: boolean) {
-        const js = `document.documentElement.dataset.fullscreen = ${JSON.stringify(isFullScreen ? "1" : "0")}`;
         for (const tabView of this.allLoadedTabViews.values()) {
             if (tabView?.webContents && !tabView.webContents.isDestroyed()) {
-                tabView.webContents.executeJavaScript(js).catch(() => {});
+                tabView.webContents.send("fullscreen-change", isFullScreen);
             }
         }
     }

@@ -100,6 +100,7 @@ declare global {
         downloadFile: (path: string) => void; // download
         openExternal: (url: string) => void; // open-external
         onFullScreenChange: (callback: (isFullScreen: boolean) => void) => void; // fullscreen-change
+        getIsFullScreen: () => boolean; // get-is-full-screen (sync)
         onZoomFactorChange: (callback: (zoomFactor: number) => void) => void; // zoom-factor-change
         onUpdaterStatusChange: (callback: (status: UpdaterStatus) => void) => void; // app-update-status
         getUpdaterStatus: () => UpdaterStatus; // get-app-update-status

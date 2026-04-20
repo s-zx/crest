@@ -30,7 +30,15 @@ function initGlobalAtoms(initOpts: GlobalInitOptions) {
             globalStore.set(isFullScreenAtom, isFullScreen);
         });
     } catch (e) {
-        console.log("failed to initialize isFullScreenAtom", e);
+        console.log("failed to subscribe to isFullScreen changes", e);
+    }
+    try {
+        const initial = getApi().getIsFullScreen?.();
+        if (typeof initial === "boolean") {
+            globalStore.set(isFullScreenAtom, initial);
+        }
+    } catch (e) {
+        console.log("failed to read initial isFullScreen", e);
     }
 
     const zoomFactorAtom = atom(1.0) as PrimitiveAtom<number>;

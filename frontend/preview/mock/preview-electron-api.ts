@@ -24,6 +24,7 @@ const previewElectronApi: ElectronApi = {
     downloadFile: (_path: string) => {},
     openExternal: (_url: string) => {},
     onFullScreenChange: (_callback: (isFullScreen: boolean) => void) => {},
+    getIsFullScreen: () => false,
     onZoomFactorChange: (_callback: (zoomFactor: number) => void) => {},
     onUpdaterStatusChange: (_callback: (status: UpdaterStatus) => void) => {},
     getUpdaterStatus: () => "up-to-date",

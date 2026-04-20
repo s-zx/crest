@@ -288,6 +288,11 @@ export function initIpcHandlers() {
         event.returnValue = event.sender.getZoomFactor();
     });
 
+    electron.ipcMain.on("get-is-full-screen", (event) => {
+        const ww = getWaveWindowByWebContentsId(event.sender.id);
+        event.returnValue = ww ? ww.isFullScreen() : false;
+    });
+
     const hasBeforeInputRegisteredMap = new Map<number, boolean>();
 
     electron.ipcMain.on("webview-focus", (event: Electron.IpcMainEvent, focusedId: number) => {
