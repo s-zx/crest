@@ -4,7 +4,7 @@
 import { globalStore } from "@/app/store/jotaiStore";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { createBlock, getApi, getFocusedBlockId } from "@/store/global";
+import { atoms, createBlock, getApi, getFocusedBlockId } from "@/store/global";
 import { fireAndForget, sleep, stringToBase64 } from "@/util/util";
 import { formatRemoteUri } from "@/util/waveutil";
 import * as jotai from "jotai";
@@ -91,27 +91,29 @@ export class FileExplorerModel {
         this.watchPath(root);
     }
 
+    private watchCallbacks = new Map<string, (eventType: string, filename: string) => void>();
+
     private watchPath(path: string): void {
         if (this.watchedPaths.has(path)) return;
         this.watchedPaths.add(path);
-        getApi().watchDir(path, () => {
-            // Schedule a refresh for THIS directory only — not the whole tree.
-            // Multiple rapid events for the same or different dirs are batched
-            // in a single 400 ms debounce window.
+        const cb = () => {
             this.pendingRefreshPaths.add(path);
             this.debouncedFlushRefresh();
-        });
+        };
+        this.watchCallbacks.set(path, cb);
+        getApi().watchDir(path, cb);
     }
 
     private unwatchPath(path: string): void {
         if (!this.watchedPaths.has(path)) return;
         this.watchedPaths.delete(path);
-        getApi().unwatchDir(path);
+        const cb = this.watchCallbacks.get(path);
+        this.watchCallbacks.delete(path);
+        getApi().unwatchDir(path, cb);
     }
 
     stopAutoRefresh(): void {
-        for (const p of this.watchedPaths) getApi().unwatchDir(p);
-        this.watchedPaths.clear();
+        for (const p of Array.from(this.watchedPaths)) this.unwatchPath(p);
     }
 
     private refreshAll(): void {
@@ -199,7 +201,12 @@ export class FileExplorerModel {
         if (next.has(path)) {
             next.delete(path);
             globalStore.set(this.expandedAtom, next);
-            this.unwatchPath(path);
+            // Unwatch the collapsed dir AND any descendant watches — otherwise
+            // expand+collapse of nested trees accumulates dead watchers.
+            const prefix = path.endsWith("/") ? path : path + "/";
+            for (const p of Array.from(this.watchedPaths)) {
+                if (p === path || p.startsWith(prefix)) this.unwatchPath(p);
+            }
             return;
         }
         next.add(path);
@@ -213,12 +220,16 @@ export class FileExplorerModel {
     setRoot(newRoot: string): void {
         const current = globalStore.get(this.rootAtom);
         if (current === newRoot) return;
+        // Drop every active watcher — expanded paths under the old root are no
+        // longer reachable and nothing will ever unwatch them otherwise.
+        for (const p of Array.from(this.watchedPaths)) this.unwatchPath(p);
         globalStore.set(this.rootAtom, newRoot);
         globalStore.set(this.expandedAtom, new Set());
         globalStore.set(this.errorMapAtom, new Map());
         this.childrenCache.clear();
         this.inFlight.clear();
         globalStore.set(this.childrenVersionAtom, globalStore.get(this.childrenVersionAtom) + 1);
+        this.watchPath(newRoot);
         fireAndForget(() => this.fetchChildren(newRoot));
     }
 
@@ -264,7 +275,9 @@ export class FileExplorerModel {
 
     private parentDir(path: string): string {
         const idx = path.lastIndexOf("/");
-        return idx > 0 ? path.slice(0, idx) : path;
+        if (idx < 0) return path;
+        if (idx === 0) return "/";
+        return path.slice(0, idx);
     }
 
     async commitRename(oldPath: string, newName: string): Promise<void> {
@@ -337,8 +350,16 @@ export class FileExplorerModel {
 
     async openInNewTab(dir: string): Promise<void> {
         // Create a new Wave tab, then open a terminal block at the given directory.
+        // Wait for staticTabId to flip to the new tab instead of a fixed sleep(200) —
+        // slow hosts regularly miss that window and the block lands in the old tab.
+        const before = globalStore.get(atoms.staticTabId);
         getApi().createTab();
-        await sleep(200); // wait for the new tab to initialize
+        const deadline = Date.now() + 3000;
+        while (Date.now() < deadline) {
+            const current = globalStore.get(atoms.staticTabId);
+            if (current !== before && current !== "") break;
+            await sleep(30);
+        }
         await createBlock({ meta: { controller: "shell", view: "term", "cmd:cwd": dir } });
     }
 }
