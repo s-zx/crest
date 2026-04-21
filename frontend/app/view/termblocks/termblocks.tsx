@@ -386,7 +386,7 @@ export class TermBlocksViewModel implements ViewModel {
         }
         const rawSize = block.outputendoffset - block.outputstartoffset;
         if (rawSize <= 0) {
-            const cache = { ...globalStore.get(this.outputCacheAtom), [block.oid]: "" };
+            const cache = { ...globalStore.get(this.outputCacheAtom), [block.oid]: new Uint8Array(0) };
             globalStore.set(this.outputCacheAtom, cache);
             return;
         }
@@ -1097,7 +1097,7 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
     };
 
     const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.ctrlKey && e.key.toLowerCase() === "c" && !e.metaKey) {
+        if (e.ctrlKey && e.key.toLowerCase() === "c" && !e.metaKey && !e.shiftKey && !e.altKey) {
             e.preventDefault();
             setValue("");
             historyIdxRef.current = -1;
@@ -1398,16 +1398,20 @@ const CwdPickerContent: React.FC<{ cwd: string; blockId: string; close: () => vo
 
     React.useEffect(() => {
         searchRef.current?.focus();
+        let cancelled = false;
         const load = async () => {
             const list: FileInfo[] = [];
             const stream = RpcApi.FileListStreamCommand(TabRpcClient, { path: formatRemoteUri(cwd, "local") }, null);
             for await (const chunk of stream) {
+                if (cancelled) return;
                 if (chunk?.fileinfo) list.push(...chunk.fileinfo.filter((f) => f.isdir));
             }
+            if (cancelled) return;
             list.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
             setEntries(list);
         };
         load().catch(() => {});
+        return () => { cancelled = true; };
     }, [cwd]);
 
     const navigate = (path: string) => {
@@ -1476,14 +1480,15 @@ const BranchPickerContent: React.FC<{ cwd: string; currentBranch: string; blockI
 
     React.useEffect(() => {
         searchRef.current?.focus();
+        let cancelled = false;
         const load = async () => {
             const res = await RpcApi.RunLocalCmdCommand(TabRpcClient, {
                 cmd: "git",
                 args: ["branch", "--format=%(refname:short)"],
                 cwd,
             });
+            if (cancelled) return;
             const list = res.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
-            // current branch first, rest sorted
             list.sort((a, b) => {
                 if (a === currentBranch) return -1;
                 if (b === currentBranch) return 1;
@@ -1492,6 +1497,7 @@ const BranchPickerContent: React.FC<{ cwd: string; currentBranch: string; blockI
             setBranches(list);
         };
         load().catch(() => {});
+        return () => { cancelled = true; };
     }, [cwd, currentBranch]);
 
     const filtered = search ? branches.filter((b) => b.toLowerCase().includes(search.toLowerCase())) : branches;
