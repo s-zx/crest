@@ -1489,17 +1489,31 @@ func (ws *WshServer) GetShellHistoryCommand(ctx context.Context, data wshrpc.Com
 	}, nil
 }
 
+// runLocalCmdAllowlist limits which binaries RunLocalCmdCommand may execute.
+var runLocalCmdAllowlist = map[string]bool{
+	"git": true,
+}
+
+const runLocalCmdOutputLimit = 1 * 1024 * 1024 // 1 MiB per stream
+const runLocalCmdTimeout = 30 * time.Second
+
 func (ws *WshServer) RunLocalCmdCommand(ctx context.Context, data wshrpc.CommandRunLocalCmdData) (*wshrpc.CommandRunLocalCmdResponse, error) {
 	if data.Cmd == "" {
 		return nil, fmt.Errorf("cmd is required")
 	}
+	base := filepath.Base(data.Cmd)
+	if !runLocalCmdAllowlist[base] {
+		return nil, fmt.Errorf("command %q is not permitted", base)
+	}
+	ctx, cancel := context.WithTimeout(ctx, runLocalCmdTimeout)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, data.Cmd, data.Args...)
 	if data.Cwd != "" {
 		cmd.Dir = data.Cwd
 	}
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdout = &limitWriter{w: &stdout, limit: runLocalCmdOutputLimit}
+	cmd.Stderr = &limitWriter{w: &stderr, limit: runLocalCmdOutputLimit}
 	exitCode := 0
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -1511,6 +1525,23 @@ func (ws *WshServer) RunLocalCmdCommand(ctx context.Context, data wshrpc.Command
 		Stderr:   stderr.String(),
 		ExitCode: exitCode,
 	}, nil
+}
+
+// limitWriter wraps an io.Writer and stops writing after limit bytes.
+type limitWriter struct {
+	w     *bytes.Buffer
+	limit int
+}
+
+func (lw *limitWriter) Write(p []byte) (int, error) {
+	remaining := lw.limit - lw.w.Len()
+	if remaining <= 0 {
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		p = p[:remaining]
+	}
+	return lw.w.Write(p)
 }
 
 func (ws *WshServer) GetGitInfoCommand(ctx context.Context, cwd string) (*wshrpc.GitInfoResponse, error) {

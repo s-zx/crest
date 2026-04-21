@@ -515,31 +515,61 @@ export function initIpcHandlers() {
 
     // ---- Directory watching for file explorer auto-update ----
     // fs.watch() must run in the main process (sandbox prevents Node in preload).
-    // The main process watches the path and sends `dir-changed:<path>` IPC events
-    // back to the requesting renderer.
-    const dirWatchers = new Map<string, { watcher: fs.FSWatcher; senderId: number }>();
+    // Single channel "dir-changed" carries the path in the payload — embedding the
+    // renderer-supplied path in the channel name would let a compromised renderer
+    // collide with arbitrary channels.
+    const dirWatchers = new Map<string, fs.FSWatcher>();
+    const dirWatchersBySender = new Map<number, Set<string>>();
+
+    const closeWatcher = (key: string) => {
+        const w = dirWatchers.get(key);
+        if (!w) return;
+        try {
+            w.close();
+        } catch {
+            // best-effort
+        }
+        dirWatchers.delete(key);
+    };
+
+    const releaseAllForSender = (senderId: number) => {
+        const keys = dirWatchersBySender.get(senderId);
+        if (!keys) return;
+        for (const k of keys) closeWatcher(k);
+        dirWatchersBySender.delete(senderId);
+    };
 
     electron.ipcMain.on("watch-dir", (event, dirPath: string) => {
+        if (typeof dirPath !== "string" || dirPath === "") return;
         const key = `${event.sender.id}:${dirPath}`;
         if (dirWatchers.has(key)) return;
         try {
             const watcher = fs.watch(dirPath, (eventType, filename) => {
                 if (!event.sender.isDestroyed()) {
-                    event.sender.send(`dir-changed:${dirPath}`, eventType, filename ?? "");
+                    event.sender.send("dir-changed", dirPath, eventType, filename ?? "");
                 }
             });
-            dirWatchers.set(key, { watcher, senderId: event.sender.id });
+            dirWatchers.set(key, watcher);
+            let set = dirWatchersBySender.get(event.sender.id);
+            if (!set) {
+                set = new Set();
+                dirWatchersBySender.set(event.sender.id, set);
+                event.sender.once("destroyed", () => releaseAllForSender(event.sender.id));
+            }
+            set.add(key);
         } catch (_e) {
             // Dir may not exist yet — silently ignore.
         }
     });
 
     electron.ipcMain.on("unwatch-dir", (event, dirPath: string) => {
+        if (typeof dirPath !== "string" || dirPath === "") return;
         const key = `${event.sender.id}:${dirPath}`;
-        const entry = dirWatchers.get(key);
-        if (entry) {
-            entry.watcher.close();
-            dirWatchers.delete(key);
+        closeWatcher(key);
+        const set = dirWatchersBySender.get(event.sender.id);
+        if (set) {
+            set.delete(key);
+            if (set.size === 0) dirWatchersBySender.delete(event.sender.id);
         }
     });
 

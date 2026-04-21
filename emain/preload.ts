@@ -3,6 +3,20 @@
 
 import { contextBridge, ipcRenderer, Rectangle, webUtils, WebviewTag } from "electron";
 
+// Single shared dispatcher for directory-watch events (main fans them out here).
+const dirWatchCallbacks = new Map<string, Set<(eventType: string, filename: string) => void>>();
+ipcRenderer.on("dir-changed", (_event, path: string, eventType: string, filename: string) => {
+    const cbs = dirWatchCallbacks.get(path);
+    if (!cbs) return;
+    for (const cb of cbs) {
+        try {
+            cb(eventType, filename);
+        } catch (e) {
+            console.error("dir-changed callback error", e);
+        }
+    }
+});
+
 // update type in custom.d.ts (ElectronApi type)
 contextBridge.exposeInMainWorld("api", {
     getAuthKey: () => ipcRenderer.sendSync("get-auth-key"),
@@ -75,16 +89,31 @@ contextBridge.exposeInMainWorld("api", {
     saveTextFile: (fileName: string, content: string) => ipcRenderer.invoke("save-text-file", fileName, content),
     setIsActive: () => ipcRenderer.invoke("set-is-active"),
     watchDir: (path: string, callback: (eventType: string, filename: string) => void): void => {
-        // Ask the main process to start watching; listen for change events it sends back.
+        // Register (or fan-out) a per-path callback. Main process de-duplicates at its end;
+        // we track callbacks per path so unwatchDir only removes the intended listener.
+        let entry = dirWatchCallbacks.get(path);
+        if (!entry) {
+            entry = new Set();
+            dirWatchCallbacks.set(path, entry);
+        }
+        entry.add(callback);
         ipcRenderer.send("watch-dir", path);
-        // Register only once per path — deduplicated on the main-process side.
-        ipcRenderer.on(`dir-changed:${path}`, (_event, eventType: string, filename: string) => {
-            callback(eventType, filename);
-        });
     },
-    unwatchDir: (path: string): void => {
-        ipcRenderer.send("unwatch-dir", path);
-        ipcRenderer.removeAllListeners(`dir-changed:${path}`);
+    unwatchDir: (path: string, callback?: (eventType: string, filename: string) => void): void => {
+        const entry = dirWatchCallbacks.get(path);
+        if (entry) {
+            if (callback) {
+                entry.delete(callback);
+            } else {
+                entry.clear();
+            }
+            if (entry.size === 0) {
+                dirWatchCallbacks.delete(path);
+                ipcRenderer.send("unwatch-dir", path);
+            }
+        } else {
+            ipcRenderer.send("unwatch-dir", path);
+        }
     },
 });
 

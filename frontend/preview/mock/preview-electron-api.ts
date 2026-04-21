@@ -60,6 +60,8 @@ const previewElectronApi: ElectronApi = {
     doRefresh: () => {},
     saveTextFile: (_fileName: string, _content: string) => Promise.resolve(false),
     setIsActive: async () => {},
+    watchDir: (_path: string, _callback: (eventType: string, filename: string) => void) => {},
+    unwatchDir: (_path: string, _callback?: (eventType: string, filename: string) => void) => {},
 };
 
 function installPreviewElectronApi() {

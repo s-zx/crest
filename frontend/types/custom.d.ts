@@ -138,7 +138,7 @@ declare global {
         saveTextFile: (fileName: string, content: string) => Promise<boolean>; // save-text-file
         setIsActive: () => Promise<void>; // set-is-active
         watchDir: (path: string, callback: (eventType: string, filename: string) => void) => void;
-        unwatchDir: (path: string) => void;
+        unwatchDir: (path: string, callback?: (eventType: string, filename: string) => void) => void;
     };
 
     type ElectronContextMenuItem = {
