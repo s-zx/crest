@@ -54,7 +54,7 @@ export function parseDiffOutput(raw: string): DiffLine[] {
             lines.push({ type: "add", content: line.slice(1) });
         } else if (line.startsWith("-")) {
             lines.push({ type: "remove", content: line.slice(1) });
-        } else if (line.length > 0) {
+        } else if (line.startsWith(" ")) {
             lines.push({ type: "context", content: line.slice(1) });
         }
     }
@@ -88,6 +88,9 @@ export class GitModel {
     cwdAtom: jotai.PrimitiveAtom<string>;
 
     private watchedGitDir: string | null = null;
+    private watchedCwd: string | null = null;
+    private gitDirCallback: (() => void) | null = null;
+    private cwdCallback: (() => void) | null = null;
     private debouncedRefresh!: () => void;
 
     private constructor() {
@@ -108,21 +111,31 @@ export class GitModel {
 
     startAutoRefresh(): void {
         const cwd = globalStore.get(this.cwdAtom);
+        const gitDir = `${cwd}/.git`;
+        if (this.watchedGitDir === gitDir && this.watchedCwd === cwd) return;
+        this.stopAutoRefresh();
         // Watch the .git directory — any git operation (add, commit, checkout...)
         // modifies files under .git, triggering an immediate refresh.
-        const gitDir = `${cwd}/.git`;
-        if (this.watchedGitDir === gitDir) return;
-        if (this.watchedGitDir) getApi().unwatchDir(this.watchedGitDir);
+        this.gitDirCallback = () => this.debouncedRefresh();
+        getApi().watchDir(gitDir, this.gitDirCallback);
         this.watchedGitDir = gitDir;
-        getApi().watchDir(gitDir, () => this.debouncedRefresh());
         // Also watch the working tree root for new/deleted untracked files.
-        getApi().watchDir(cwd, () => this.debouncedRefresh());
+        this.cwdCallback = () => this.debouncedRefresh();
+        getApi().watchDir(cwd, this.cwdCallback);
+        this.watchedCwd = cwd;
     }
 
     stopAutoRefresh(): void {
-        if (this.watchedGitDir) { getApi().unwatchDir(this.watchedGitDir); this.watchedGitDir = null; }
-        const cwd = globalStore.get(this.cwdAtom);
-        getApi().unwatchDir(cwd);
+        if (this.watchedGitDir && this.gitDirCallback) {
+            getApi().unwatchDir(this.watchedGitDir, this.gitDirCallback);
+        }
+        this.watchedGitDir = null;
+        this.gitDirCallback = null;
+        if (this.watchedCwd && this.cwdCallback) {
+            getApi().unwatchDir(this.watchedCwd, this.cwdCallback);
+        }
+        this.watchedCwd = null;
+        this.cwdCallback = null;
     }
 
     static getInstance(): GitModel {
@@ -139,6 +152,10 @@ export class GitModel {
             globalStore.set(this.expandedFilesAtom, new Set());
             globalStore.set(this.fileDiffsAtom, new Map());
             globalStore.set(this.fileStatsAtom, new Map());
+            // Re-install watchers against the new cwd if auto-refresh was active.
+            if (this.watchedGitDir || this.watchedCwd) {
+                this.startAutoRefresh();
+            }
         }
     }
 
@@ -240,13 +257,18 @@ export class GitModel {
         globalStore.set(this.expandedFilesAtom, new Set());
     }
 
-    async discardFile(path: string): Promise<void> {
+    async discardFile(path: string, opts?: { skipRefresh?: boolean }): Promise<void> {
         const cwd = globalStore.get(this.cwdAtom);
         await RpcApi.RunLocalCmdCommand(TabRpcClient, {
             cmd: "git",
             args: ["checkout", "--", path],
             cwd,
         });
+        if (!opts?.skipRefresh) await this.refresh();
+    }
+
+    async discardFiles(paths: string[]): Promise<void> {
+        await Promise.all(paths.map((p) => this.discardFile(p, { skipRefresh: true })));
         await this.refresh();
     }
 }

@@ -397,15 +397,10 @@ const FileRow = memo(({ file, expanded, loading, stats, diff }: FileRowProps) =>
 });
 FileRow.displayName = "FileRow";
 
-// Helper: grab cwd from model
+// Helper: grab cwd from the model atom directly. Earlier versions read a DOM
+// data attribute that was never populated — that silently broke "Open file".
 function globalStore_get_cwd(): string | null {
-    try {
-        return GitModel.getInstance()
-            ? (document.querySelector("[data-git-cwd]") as HTMLElement | null)?.dataset?.gitCwd ?? null
-            : null;
-    } catch {
-        return null;
-    }
+    return globalStore.get(GitModel.getInstance().cwdAtom) || null;
 }
 
 // ---- Skeleton file block (loading state) ----
@@ -433,6 +428,7 @@ export const GitReviewSidebar = memo(() => {
         model.syncCwd();
         fireAndForget(() => model.refresh());
         model.startAutoRefresh();
+        return () => model.stopAutoRefresh();
     }, []);
 
     const layoutModel = WorkspaceLayoutModel.getInstance();
@@ -492,9 +488,7 @@ export const GitReviewSidebar = memo(() => {
                                     `Discard all uncommitted changes across ${n} file${n === 1 ? "" : "s"}?\n\nThis cannot be undone.`
                                 );
                                 if (!ok) return;
-                                fireAndForget(async () => {
-                                    await Promise.all(files.map((f) => model.discardFile(f.path)));
-                                });
+                                fireAndForget(() => model.discardFiles(files.map((f) => f.path)));
                             }}
                             className="flex items-center gap-1.5 h-6 px-2 rounded-sm border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.05] text-[12px] text-secondary/85 hover:text-rose-400 cursor-pointer transition-colors disabled:opacity-40 disabled:hover:bg-white/[0.02] disabled:hover:text-secondary/85"
                             title="Discard all uncommitted changes"
