@@ -18,6 +18,8 @@ import {
 import * as WOS from "@/store/wos";
 import { fireAndForget } from "@/util/util";
 
+const FontSizeOptions = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] as const;
+
 // Small heuristic borrowed from term-model: don't surface the File Browser
 // item when the last command implies we're on a remote host.
 function isLikelyOnSameHost(lastCommand: string | null | undefined): boolean {
@@ -127,7 +129,7 @@ export function buildTermSettingsMenuItems(opts: TermSettingsMenuOpts): ContextM
     const themesSubmenu: ContextMenuItem[] = termThemeKeys.map((themeName) => ({
         label: termThemes[themeName]["display:name"] ?? themeName,
         type: "checkbox",
-        checked: curThemeName == themeName,
+        checked: curThemeName === themeName,
         click: () => setMeta({ "term:theme": themeName }),
     }));
     themesSubmenu.unshift({
@@ -137,10 +139,10 @@ export function buildTermSettingsMenuItems(opts: TermSettingsMenuOpts): ContextM
         click: () => setMeta({ "term:theme": null }),
     });
 
-    const fontSizeSubmenu: ContextMenuItem[] = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18].map((fontSize) => ({
+    const fontSizeSubmenu: ContextMenuItem[] = FontSizeOptions.map((fontSize) => ({
         label: fontSize.toString() + "px",
         type: "checkbox",
-        checked: overrideFontSize == fontSize,
+        checked: overrideFontSize === fontSize,
         click: () => setMeta({ "term:fontsize": fontSize }),
     }));
     fontSizeSubmenu.unshift({
@@ -160,13 +162,13 @@ export function buildTermSettingsMenuItems(opts: TermSettingsMenuOpts): ContextM
         {
             label: "Transparent Background",
             type: "checkbox",
-            checked: transparencyMeta == 0.5,
+            checked: transparencyMeta === 0.5,
             click: () => setMeta({ "term:transparency": 0.5 }),
         },
         {
             label: "No Transparency",
             type: "checkbox",
-            checked: transparencyMeta == 0,
+            checked: transparencyMeta === 0,
             click: () => setMeta({ "term:transparency": 0 }),
         },
     ];
@@ -256,13 +258,13 @@ export function buildTermSettingsMenuItems(opts: TermSettingsMenuOpts): ContextM
             {
                 label: "Info",
                 type: "checkbox",
-                checked: debugConn == "info",
+                checked: debugConn === "info",
                 click: () => setMeta({ "term:conndebug": "info" }),
             },
             {
                 label: "Verbose",
                 type: "checkbox",
-                checked: debugConn == "debug",
+                checked: debugConn === "debug",
                 click: () => setMeta({ "term:conndebug": "debug" }),
             },
         ],

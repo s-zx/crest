@@ -19,6 +19,7 @@ export type GitHubPanel = "user" | "notifications" | "codereview" | null;
 
 export class GitHubModel {
     private static instance: GitHubModel | null = null;
+    private initialized = false;
 
     tokenAtom: jotai.PrimitiveAtom<string | null>;
     userAtom: jotai.PrimitiveAtom<GitHubUser | null>;
@@ -42,9 +43,12 @@ export class GitHubModel {
         // actually opens a panel eliminates startup network overhead.
     }
 
-    // Called lazily when user first opens a GitHub-backed panel.
+    // Called lazily when user first opens a GitHub-backed panel. Idempotent —
+    // we guard on `initialized`, not the token atom, so that users who are
+    // logged out don't re-run the lookup on every panel open.
     ensureInitialized(): void {
-        if (globalStore.get(this.tokenAtom) != null) return;
+        if (this.initialized) return;
+        this.initialized = true;
         this.initialize();
     }
 
@@ -102,7 +106,15 @@ export class GitHubModel {
             const prs = await fetchPRsToReview(t, user.login);
             globalStore.set(this.prsAtom, prs);
         } catch (e: any) {
-            globalStore.set(this.errorAtom, e?.message ?? String(e));
+            const msg: string = e?.message ?? String(e);
+            // 401 means the stored token is revoked/expired; clear it so the
+            // UI shows the login prompt again rather than a perpetual error.
+            if (msg.includes("401") || msg.toLowerCase().includes("unauthorized")) {
+                this.logout();
+                globalStore.set(this.errorAtom, "GitHub token expired. Please log in again.");
+            } else {
+                globalStore.set(this.errorAtom, msg);
+            }
         } finally {
             globalStore.set(this.loadingAtom, false);
         }
