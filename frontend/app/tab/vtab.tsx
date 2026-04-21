@@ -28,6 +28,7 @@ interface VTabProps {
     showDivider?: boolean;
     isDragging: boolean;
     isReordering: boolean;
+    hoverResetVersion?: number;
     onSelect: () => void;
     onClose?: () => void;
     onRename?: (newName: string) => void;
@@ -46,6 +47,7 @@ export function VTab({
     showDivider = true,
     isDragging,
     isReordering,
+    hoverResetVersion,
     onSelect,
     onClose,
     onRename,
@@ -85,6 +87,13 @@ export function VTab({
             }
         };
     }, []);
+
+    // When the tab bar bumps hoverResetVersion (e.g. after a drag), notify the
+    // parent that hover is clear so stale "hovered" state tied to this row
+    // doesn't linger. Purely-CSS :hover self-corrects on the next mousemove.
+    useEffect(() => {
+        onHoverChanged?.(false);
+    }, [hoverResetVersion]);
 
     const selectEditableText = useCallback(() => {
         if (!editableRef.current) {

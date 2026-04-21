@@ -51,6 +51,63 @@ function shortenHome(cwd: string, home: string): string {
     return cwd;
 }
 
+// Shared git-info poller: one interval + one RPC per unique cwd for all tabs.
+// Previously every VTab spun its own 8s setInterval; that scaled O(tabs) RPCs.
+const GitInfoPollIntervalMs = 8000;
+const gitInfoCache = new Map<string, GitInfoResponse | null>();
+const gitInfoSubs = new Map<string, Set<(info: GitInfoResponse | null) => void>>();
+let gitInfoTimer: ReturnType<typeof setInterval> | null = null;
+
+function fanout(cwd: string, info: GitInfoResponse | null) {
+    gitInfoCache.set(cwd, info);
+    const subs = gitInfoSubs.get(cwd);
+    if (!subs) return;
+    for (const cb of subs) {
+        try { cb(info); } catch { /* ignore */ }
+    }
+}
+
+async function pollOne(cwd: string) {
+    try {
+        const info = await RpcApi.GetGitInfoCommand(TabRpcClient, cwd);
+        fanout(cwd, info ?? null);
+    } catch {
+        fanout(cwd, null);
+    }
+}
+
+function pollAll() {
+    for (const cwd of gitInfoSubs.keys()) fireAndForget(() => pollOne(cwd));
+}
+
+function subscribeGitInfo(cwd: string, cb: (info: GitInfoResponse | null) => void): () => void {
+    let subs = gitInfoSubs.get(cwd);
+    if (!subs) {
+        subs = new Set();
+        gitInfoSubs.set(cwd, subs);
+        fireAndForget(() => pollOne(cwd));
+    } else if (gitInfoCache.has(cwd)) {
+        cb(gitInfoCache.get(cwd) ?? null);
+    }
+    subs.add(cb);
+    if (gitInfoTimer == null) {
+        gitInfoTimer = setInterval(pollAll, GitInfoPollIntervalMs);
+    }
+    return () => {
+        const s = gitInfoSubs.get(cwd);
+        if (!s) return;
+        s.delete(cb);
+        if (s.size === 0) {
+            gitInfoSubs.delete(cwd);
+            gitInfoCache.delete(cwd);
+        }
+        if (gitInfoSubs.size === 0 && gitInfoTimer != null) {
+            clearInterval(gitInfoTimer);
+            gitInfoTimer = null;
+        }
+    };
+}
+
 function VTabWrapper({
     tabId,
     active,
@@ -120,21 +177,7 @@ function VTabWrapper({
             setGitInfo(null);
             return;
         }
-        let cancelled = false;
-        const tick = async () => {
-            try {
-                const info = await RpcApi.GetGitInfoCommand(TabRpcClient, cwd);
-                if (!cancelled) setGitInfo(info ?? null);
-            } catch {
-                if (!cancelled) setGitInfo(null);
-            }
-        };
-        tick();
-        const timer = setInterval(tick, 8000);
-        return () => {
-            cancelled = true;
-            clearInterval(timer);
-        };
+        return subscribeGitInfo(cwd, setGitInfo);
     }, [cwd]);
 
     const cwdShort = shortenHome(cwd, home);
@@ -185,12 +228,12 @@ function VTabWrapper({
 
     return (
         <VTab
-            key={`${tabId}:${hoverResetVersion}`}
             tab={tab}
             active={active}
             showDivider={showDivider}
             isDragging={isDragging}
             isReordering={isReordering}
+            hoverResetVersion={hoverResetVersion}
             onSelect={onSelect}
             onClose={onClose}
             onRename={onRename}
@@ -379,7 +422,7 @@ export function VTabBar({ workspace, className }: VTabBarProps) {
                     const isNextHovered = nextTabId === hoveredTabId;
                     return (
                         <VTabWrapper
-                            key={`${tabId}:${hoverResetVersion}`}
+                            key={tabId}
                             tabId={tabId}
                             active={isActive}
                             showDivider={
