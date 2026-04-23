@@ -20,14 +20,14 @@ const ProviderDefs: Record<string, ProviderDef> = {
     openai: {
         label: "OpenAI",
         apitype: "openai-chat",
-        endpoint: "",
+        endpoint: "https://api.openai.com/v1/chat/completions",
         secretName: "OPENAI_KEY",
         modelPlaceholder: "gpt-4o",
     },
     openrouter: {
         label: "OpenRouter",
         apitype: "openai-chat",
-        endpoint: "https://openrouter.ai/api/v1",
+        endpoint: "https://openrouter.ai/api/v1/chat/completions",
         secretName: "OPENROUTER_KEY",
         modelPlaceholder: "anthropic/claude-sonnet-4-20250514",
     },
@@ -41,7 +41,7 @@ const ProviderDefs: Record<string, ProviderDef> = {
     anthropic: {
         label: "Anthropic",
         apitype: "anthropic-messages",
-        endpoint: "https://api.anthropic.com",
+        endpoint: "https://api.anthropic.com/v1/messages",
         secretName: "ANTHROPIC_KEY",
         modelPlaceholder: "claude-sonnet-4-20250514",
     },
