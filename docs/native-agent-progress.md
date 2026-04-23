@@ -1,6 +1,6 @@
 # Crest Native Go Coding Agent — Progress Tracker
 
-Branch: `feat/native-agent` | First commit: `070ea0a0`
+Branch: `feat/native-agent`
 
 ## Phase 1 — MVP
 
@@ -19,8 +19,8 @@ Branch: `feat/native-agent` | First commit: `070ea0a0`
 - [x] `pkg/web/web.go` — route registered
 - [x] Read-only tool adapters: `read_text_file`, `read_dir`, `get_scrollback`, `cmd_history`
 - [x] `tools/browser_stub.go` — reserves `browser.*` namespace for Phase 2
-- [x] Frontend: `term-model.ts` — mode atom, prefix parsing (`:ask`/`:plan`/`:do`), pending mode+context fields
-- [x] Frontend: `term-agent.tsx` — new transport endpoint, mode chip in overlay header
+- [x] Frontend: `term-model.ts` — mode atom, prefix parsing, pending mode+context fields
+- [x] Frontend: `term-agent.tsx` — new transport endpoint, mode chip, generalized `TermAgentModel` interface
 - [x] `NOTICE` (root) + `pkg/agent/NOTICE` — Apache 2.0 ForgeCode attribution
 - [x] `go vet ./...` clean, `tsc --noEmit` clean on modified files
 
@@ -32,20 +32,33 @@ Branch: `feat/native-agent` | First commit: `070ea0a0`
 - [x] `tools/create_block.go` — term/preview/web block creation with split positioning
 - [x] `tools/focus_block.go` — `setblockfocus` RPC to tab route
 - [x] `registry.go` — all new tools wired into `buildTool()` switch
-- [x] `go vet ./...` clean (full workspace)
-- [x] Committed: `070ea0a0`
 
-### Week 4 remaining: Polish ✅
+### Week 4: Polish ✅
 
-- [x] Telemetry — `WaveChatOpts.Source = "crest-agent"` flows into `X-Wave-RequestType` header + chatstore prefix (commit `7645fe9c`)
-- [x] Chatstore isolation — `AgentChatStorePrefix = "agent:"` in `agent.go` (commit `abcdf177`)
-- [x] Unit tests: `modes_test.go` (8), `context_test.go` (3), `http_test.go` (6), `tools/tools_test.go` (19) — 38 total, all pass
-- [ ] Manual E2E smoke test (requires running Crest):
-  - [ ] `:ask how is logging wired` → markdown, no writes, no approval
-  - [ ] `:plan add retry to RunAIChat` → writes plan file, opens preview block
-  - [ ] `:do run the unit tests` → approval chip → cmd-block → exit code in chat
-  - [ ] Denied approval → structured rejection
-  - [ ] Bare `:` defaults to `do` mode
+- [x] Telemetry — `WaveChatOpts.Source = "crest-agent"` flows into `X-Wave-RequestType` header
+- [x] Chatstore isolation — `AgentChatStorePrefix = "agent:"` prefix
+- [x] Unit tests: 38 total (modes 8, context 3, http 6, tools 19) — all pass
+
+### Integration: termblocks + AI Provider UI ✅
+
+- [x] **Generalized `TermAgentModel` interface** — overlay decoupled from `TermViewModel`, works with any model
+- [x] **Agent integrated into `termblocks/`** — atoms, methods, `:` key interception on empty input, overlay rendered
+- [x] **Real `<input>` composer** — replaces virtual key capture, auto-focuses on open, Enter/Esc handling
+- [x] **AI Provider settings UI** — visual editor in Settings sidebar (`waveaivisual.tsx`):
+  - Provider dropdown (OpenAI, OpenRouter, Anthropic, Google, Custom)
+  - API key stored securely in OS keychain via `secretstore`
+  - Model + Advanced (base URL, max tokens)
+- [x] **`ai:apitokensecretname`** added to `SettingsType` + `AiSettingsType` + merge logic
+- [x] **Settings fallback** — `resolveAgentAIOpts()` tries waveai mode system first, falls back to `settings.json` fields
+- [x] **Provider endpoints** — full URLs (e.g. `https://openrouter.ai/api/v1/chat/completions`)
+
+### Manual E2E ⬜ (awaiting user test)
+
+- [ ] `:ask hello` → AI response in overlay
+- [ ] `:plan add retry to RunAIChat` → writes plan file, opens preview block
+- [ ] `:do run the unit tests` → approval chip → cmd-block → exit code in chat
+- [ ] Denied approval → structured rejection
+- [ ] Bare `:` defaults to `do` mode
 
 ## Phase 2 — Browser + MCP (~4 weeks) ⬜
 
@@ -68,13 +81,16 @@ Branch: `feat/native-agent` | First commit: `070ea0a0`
 ```
 pkg/agent/
 ├── NOTICE
-├── agent.go
-├── context.go
-├── http.go
-├── modes.go
-├── prompts.go
-├── registry.go
-├── session.go
+├── agent.go              — RunAgent entrypoint, chatstore prefix, source tag
+├── context.go            — BuildTerminalContext
+├── context_test.go
+├── http.go               — PostAgentMessageHandler, resolveAgentAIOpts (mode + settings fallback)
+├── http_test.go
+├── modes.go              — ask/plan/do modes, ApprovalPolicy, ResolveApproval
+├── modes_test.go
+├── prompts.go            — //go:embed loader
+├── registry.go           — ToolsForMode, buildTool, approvalResolver
+├── session.go            — Session struct
 ├── prompts/
 │   ├── UPSTREAM.md
 │   ├── ask.md
@@ -90,28 +106,36 @@ pkg/agent/
     ├── list_dir.go
     ├── read_file.go
     ├── shell_exec.go
+    ├── tools_test.go
     ├── write_file.go
     └── write_plan.go
 
 Modified:
-  frontend/app/view/term/term-agent.tsx
-  frontend/app/view/term/term-model.ts
-  pkg/aiusechat/usechat.go
-  pkg/web/web.go
+  frontend/app/view/term/term-agent.tsx   — generalized TermAgentModel, real <input> composer
+  frontend/app/view/term/term-model.ts    — relaxed canOpenTermAgent for no shell integration
+  frontend/app/view/termblocks/termblocks.tsx — agent atoms+methods, : key interception, overlay
+  frontend/app/view/waveconfig/waveaivisual.tsx — AI Provider visual settings UI
+  frontend/app/view/waveconfig/waveconfig-model.ts — wired visual component, renamed sidebar entry
+  pkg/aiusechat/uctypes/uctypes.go        — WaveChatOpts.Source field
+  pkg/aiusechat/usechat.go                — exported GetWaveAISettings
+  pkg/wconfig/settingsconfig.go           — ai:apitokensecretname in SettingsType
+  pkg/wconfig/metaconsts.go               — generated
+  pkg/web/web.go                          — /api/post-agent-message route
   NOTICE (root)
 ```
 
 ## Architecture Decisions
 
-- **`pkg/agent` = policy, `pkg/aiusechat` = mechanism.** One-way dependency: agent imports aiusechat, never the reverse.
-- **Tool adapters** wrap existing `aiusechat.GetXxxToolDefinition()` and inject mode-aware approval closures.
-- **`shell_exec`** creates user-visible cmd-blocks (not hidden subprocesses) — the Crest differentiator.
-- **Mode prefix** (`:ask`, `:plan`, `:do`) is parsed in `term-model.ts` via derived atom; stripped before sending to backend.
-- **ForgeCode attribution**: Apache 2.0 preserved in `NOTICE` files + `UPSTREAM.md` with pinned commit SHA.
+- **`pkg/agent` = policy, `pkg/aiusechat` = mechanism.** One-way dependency.
+- **Tool adapters** wrap `aiusechat.GetXxxToolDefinition()` + inject mode-aware approval closures.
+- **`shell_exec`** creates user-visible cmd-blocks — the Crest differentiator.
+- **`TermAgentModel` interface** — decouples overlay from any specific ViewModel.
+- **Settings fallback** — agent first tries waveai mode system, then reads `settings.json` AI fields directly.
+- **API keys via secretstore** — stored in OS keychain, referenced by `ai:apitokensecretname`.
+- **ForgeCode attribution**: Apache 2.0 preserved in `NOTICE` files + `UPSTREAM.md`.
 
 ## Open Questions
 
-- `chatstore.go` namespacing (`"agent:"+chatId`) — not yet implemented, conversations share the default store
 - `write_plan` auto-opens preview block; revisit after dogfood if too intrusive
 - `recent_cmds` cap at 20 entries (~4KB); watch token budget
 - Phase 3 endpoint convergence behind feature flag
