@@ -1497,6 +1497,7 @@ declare global {
         "ai:apitype"?: string;
         "ai:baseurl"?: string;
         "ai:apitoken"?: string;
+        "ai:apitokensecretname"?: string;
         "ai:name"?: string;
         "ai:model"?: string;
         "ai:orgid"?: string;

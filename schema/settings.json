@@ -68,6 +68,9 @@
         "ai:apitoken": {
           "type": "string"
         },
+        "ai:apitokensecretname": {
+          "type": "string"
+        },
         "ai:name": {
           "type": "string"
         },
