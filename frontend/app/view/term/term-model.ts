@@ -957,7 +957,6 @@ export class TermViewModel implements ViewModel {
             return true;
         }
 
-        console.log("term-agent keycheck", waveEvent.key, "isChar:", keyutil.isCharacterKeyEvent(waveEvent), "canOpen:", this.canOpenTermAgent());
         if (keyutil.isCharacterKeyEvent(waveEvent) && waveEvent.key === ":" && this.canOpenTermAgent()) {
             this.openTermAgentComposer();
             event.preventDefault();
