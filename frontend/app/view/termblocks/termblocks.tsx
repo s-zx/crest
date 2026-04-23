@@ -535,7 +535,7 @@ export class TermBlocksViewModel implements ViewModel {
             return;
         }
         globalStore.set(this.termAgentError, null);
-        this.termAgentRealMessage = { role: "user", parts: [{ type: "text", text: stripped }] };
+        this.termAgentRealMessage = { messageid: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: stripped }] };
         this.termAgentPendingMode = mode;
         this.termAgentPendingContext = this.buildTermAgentContext();
         globalStore.set(this.termAgentComposerOpen, false);
