@@ -2,17 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { globalStore } from "@/app/store/jotaiStore";
+import { TabCmdStateStore } from "@/app/store/tabcmdstate";
 import { waveEventSubscribeSingle } from "@/app/store/wps";
 import * as WOS from "@/app/store/wos";
-import { atoms, refocusNode } from "@/store/global";
-import { getLayoutModelForStaticTab } from "@/layout/lib/layoutModelHooks";
+import { atoms, getApi, refocusNode } from "@/store/global";
 import * as jotai from "jotai";
+import { ToastModel } from "./toast-model";
 
 export type AppNotification = {
     id: string;
     blockId: string;
-    blockCwd?: string;
-    exitCode: number;
+    tabId?: string;
+    title?: string;
+    body: string;
     ts: number;
     read: boolean;
 };
@@ -29,13 +31,13 @@ export class NotificationsModel {
     private constructor() {
         this.notificationsAtom = jotai.atom([]) as jotai.PrimitiveAtom<AppNotification[]>;
         this.unreadCountAtom = jotai.atom((get) => get(this.notificationsAtom).filter((n) => !n.read).length);
-        // WPS subscription deferred — only start listening when user first opens
-        // the Notifications panel.  Calling subscribe() at construction added a
-        // global stream for every active block, costing unnecessary round-trips.
     }
 
-    // Called lazily when Notifications panel first opens.
+    // Called lazily when Notifications panel first opens, and also ensured at
+    // app startup (so completions that happen before the panel is first opened
+    // still surface as toasts + populate the feed).
     ensureSubscribed(): void {
+        TabCmdStateStore.getInstance().ensureSubscribed();
         if (this.unsubscribe) return;
         this.subscribe();
     }
@@ -49,23 +51,38 @@ export class NotificationsModel {
 
     private subscribe(): void {
         this.unsubscribe = waveEventSubscribeSingle({
-            eventType: "block:jobstatus",
+            eventType: "cmdblock:notify",
             handler: (event) => {
-                const data = event.data;
-                if (!data || data.status !== "done") return;
-                if (data.cmdexitcode == null) return;
-                // Get the block's cwd from object store
-                const blockOref = WOS.makeORef("block", data.blockid);
-                const blockAtom = WOS.getWaveObjectAtom<Block>(blockOref);
-                const block = globalStore.get(blockAtom);
-                const cwd = block?.meta?.["cmd:cwd"] as string | undefined;
+                const ev = event.data as CmdBlockNotifyEvent | undefined;
+                if (!ev?.blockid || !ev.body) return;
+
+                // Skip when the user is already looking at this block's tab —
+                // the agent output is visible inline; no need for an alert.
+                const activeTabId = globalStore.get(atoms.staticTabId);
+                const activeTabAtom = WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", activeTabId));
+                const activeTab = globalStore.get(activeTabAtom);
+                if (activeTab?.blockids?.includes(ev.blockid)) return;
+
+                // Best-effort: find which tab owns this block so clicking the
+                // notification can switch tabs.
+                let tabId: string | undefined;
+                const ws = globalStore.get(atoms.workspace);
+                for (const tid of ws?.tabids ?? []) {
+                    const tabAtom = WOS.getWaveObjectAtom<Tab>(WOS.makeORef("tab", tid));
+                    const tab = globalStore.get(tabAtom);
+                    if (tab?.blockids?.includes(ev.blockid)) {
+                        tabId = tid;
+                        break;
+                    }
+                }
 
                 const now = Date.now();
                 const note: AppNotification = {
-                    id: `${data.blockid}:${now}:${Math.random().toString(36).slice(2, 8)}`,
-                    blockId: data.blockid,
-                    blockCwd: cwd,
-                    exitCode: data.cmdexitcode,
+                    id: `${ev.blockid}:${now}:${Math.random().toString(36).slice(2, 7)}`,
+                    blockId: ev.blockid,
+                    tabId,
+                    title: ev.title || undefined,
+                    body: ev.body,
                     ts: now,
                     read: false,
                 };
@@ -73,6 +90,8 @@ export class NotificationsModel {
                 const current = globalStore.get(this.notificationsAtom);
                 const next = [note, ...current].slice(0, MAX_NOTIFICATIONS);
                 globalStore.set(this.notificationsAtom, next);
+
+                ToastModel.getInstance().push(note);
             },
         });
     }
@@ -95,12 +114,24 @@ export class NotificationsModel {
         globalStore.set(this.notificationsAtom, []);
     }
 
-    focusBlock(blockId: string): void {
-        const layoutModel = getLayoutModelForStaticTab();
-        const node = layoutModel?.getNodeByBlockId(blockId);
-        if (node?.id && layoutModel) {
-            layoutModel.focusNode(node.id);
-            refocusNode(blockId);
+    focusBlock(blockId: string, tabId?: string): void {
+        const activeTabId = globalStore.get(atoms.staticTabId);
+        if (tabId && tabId !== activeTabId) {
+            // Switch to the tab that owns this block, then focus it once the
+            // staticTabId atom settles (main-process round-trip).
+            getApi().setActiveTab(tabId);
+            let tries = 20;
+            const poll = () => {
+                if (globalStore.get(atoms.staticTabId) === tabId) {
+                    refocusNode(blockId);
+                    return;
+                }
+                if (--tries > 0) setTimeout(poll, 50);
+                else refocusNode(blockId);
+            };
+            setTimeout(poll, 50);
+            return;
         }
+        refocusNode(blockId);
     }
 }

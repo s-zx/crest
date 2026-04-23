@@ -7,6 +7,7 @@ type ShowContextMenuOpts = {
     onSelect?: (item: ContextMenuItem) => void;
     onCancel?: () => void;
     onClose?: (item: ContextMenuItem | null) => void;
+    position?: { x: number; y: number };
 };
 
 class ContextMenuModel {
@@ -83,7 +84,7 @@ class ContextMenuModel {
             oid = globalStore.get(atoms.builderId);
         }
         
-        getApi().showContextMenu(oid, electronMenuItems);
+        getApi().showContextMenu(oid, electronMenuItems, opts?.position);
     }
 }
 

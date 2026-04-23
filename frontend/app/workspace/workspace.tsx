@@ -5,6 +5,8 @@ import { ErrorBoundary } from "@/app/element/errorboundary";
 import { CenteredDiv } from "@/app/element/quickelems";
 import { FileExplorer } from "@/app/fileexplorer/file-explorer";
 import { ModalsRenderer } from "@/app/modals/modalsrenderer";
+import { NotificationToastStacker } from "@/app/notifications/notification-toast";
+import { NotificationsModel } from "@/app/notifications/notifications-model";
 import { GitReviewSidebar } from "@/app/codereview/git-panel";
 import { TabBar } from "@/app/tab/tabbar";
 import { TabContent } from "@/app/tab/tabcontent";
@@ -27,6 +29,12 @@ const WorkspaceElem = memo(() => {
     const workspaceLayoutModel = WorkspaceLayoutModel.getInstance();
     const tabId = useAtomValue(atoms.staticTabId);
     const ws = useAtomValue(atoms.workspace);
+
+    // Start background subscriptions immediately so completions that happen
+    // before the notifications panel is first opened still surface as toasts.
+    useEffect(() => {
+        NotificationsModel.getInstance().ensureSubscribed();
+    }, []);
     const tabBarPosition = useAtomValue(getSettingsKeyAtom("app:tabbar")) ?? "top";
     const showLeftTabBar = tabBarPosition === "left";
     const vtabVisible = useAtomValue(workspaceLayoutModel.vtabVisibleAtom);
@@ -163,6 +171,7 @@ const WorkspaceElem = memo(() => {
                     <ModalsRenderer />
                 </ErrorBoundary>
             </div>
+            <NotificationToastStacker />
         </div>
     );
 });

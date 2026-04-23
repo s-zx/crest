@@ -1,6 +1,7 @@
 // Copyright 2026, Command Line Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { UseChatSendMessageType, UseChatSetMessagesType } from "@/app/aipanel/aitypes";
 import { WaveAIModel } from "@/app/aipanel/waveai-model";
 import { BlockNodeModel } from "@/app/block/blocktypes";
 import { appHandleKeyDown } from "@/app/store/keymodel";
@@ -84,6 +85,16 @@ export class TermViewModel implements ViewModel {
     isRestarting: jotai.PrimitiveAtom<boolean>;
     termDurableStatus: jotai.Atom<BlockJobStatusData | null>;
     termConfigedDurable: jotai.Atom<null | boolean>;
+    termAgentVisible: jotai.PrimitiveAtom<boolean>;
+    termAgentComposerOpen: jotai.PrimitiveAtom<boolean>;
+    termAgentInput: jotai.PrimitiveAtom<string>;
+    termAgentError: jotai.PrimitiveAtom<string | null>;
+    termAgentChatId: jotai.PrimitiveAtom<string>;
+    termAgentSendMessage: UseChatSendMessageType | null;
+    termAgentSetMessages: UseChatSetMessagesType | null;
+    termAgentStop: (() => void) | null;
+    termAgentChatStatus: string;
+    termAgentRealMessage: any | null;
     searchAtoms?: SearchAtoms;
 
     constructor({ blockId, nodeModel, tabModel }: ViewModelInitType) {
@@ -108,6 +119,16 @@ export class TermViewModel implements ViewModel {
             return blockData?.meta?.["term:mode"] ?? "term";
         });
         this.isRestarting = jotai.atom(false);
+        this.termAgentVisible = jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
+        this.termAgentComposerOpen = jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
+        this.termAgentInput = jotai.atom("") as jotai.PrimitiveAtom<string>;
+        this.termAgentError = jotai.atom(null) as jotai.PrimitiveAtom<string | null>;
+        this.termAgentChatId = jotai.atom(crypto.randomUUID()) as jotai.PrimitiveAtom<string>;
+        this.termAgentSendMessage = null;
+        this.termAgentSetMessages = null;
+        this.termAgentStop = null;
+        this.termAgentChatStatus = "ready";
+        this.termAgentRealMessage = null;
         this.viewIcon = jotai.atom((get) => {
             const termMode = get(this.termMode);
             if (termMode == "vdom") {
@@ -512,6 +533,157 @@ export class TermViewModel implements ViewModel {
         RpcApi.ControllerInputCommand(TabRpcClient, { blockid: this.blockId, inputdata64: b64data });
     }
 
+    registerTermAgentChat(
+        sendMessage: UseChatSendMessageType,
+        setMessages: UseChatSetMessagesType,
+        status: string,
+        stop: () => void
+    ) {
+        this.termAgentSendMessage = sendMessage;
+        this.termAgentSetMessages = setMessages;
+        this.termAgentChatStatus = status;
+        this.termAgentStop = stop;
+    }
+
+    getAndClearTermAgentMessage(): any | null {
+        const msg = this.termAgentRealMessage;
+        this.termAgentRealMessage = null;
+        return msg;
+    }
+
+    setTermAgentError(message: string | null) {
+        globalStore.set(this.termAgentError, message);
+    }
+
+    getTermAgentMode(): string {
+        const aiModel = WaveAIModel.getInstance();
+        const currentMode = globalStore.get(aiModel.currentAIMode);
+        if (currentMode && aiModel.isValidMode(currentMode)) {
+            return currentMode;
+        }
+        const defaultMode = globalStore.get(aiModel.defaultModeAtom);
+        if (defaultMode && aiModel.isValidMode(defaultMode)) {
+            return defaultMode;
+        }
+        return currentMode ?? defaultMode ?? "";
+    }
+
+    openTermAgentComposer() {
+        globalStore.set(this.termAgentVisible, true);
+        globalStore.set(this.termAgentComposerOpen, true);
+        globalStore.set(this.termAgentInput, "");
+        globalStore.set(this.termAgentError, null);
+    }
+
+    closeTermAgentComposer() {
+        globalStore.set(this.termAgentComposerOpen, false);
+        globalStore.set(this.termAgentInput, "");
+    }
+
+    hideTermAgentOverlay() {
+        this.closeTermAgentComposer();
+        globalStore.set(this.termAgentVisible, false);
+    }
+
+    clearTermAgentSession() {
+        this.termAgentStop?.();
+        globalStore.set(this.termAgentChatId, crypto.randomUUID());
+        globalStore.set(this.termAgentError, null);
+        this.termAgentSetMessages?.([]);
+    }
+
+    canOpenTermAgent(): boolean {
+        const blockData = globalStore.get(this.blockAtom);
+        if (blockData?.meta?.controller === "cmd") {
+            return false;
+        }
+        if (blockData?.meta?.["term:mode"] === "vdom") {
+            return false;
+        }
+        const shellState = this.termRef.current?.shellIntegrationStatusAtom
+            ? globalStore.get(this.termRef.current.shellIntegrationStatusAtom)
+            : null;
+        const inputEmpty = this.termRef.current?.shellInputEmptyAtom
+            ? globalStore.get(this.termRef.current.shellInputEmptyAtom)
+            : null;
+        return shellState === "ready" && inputEmpty === true;
+    }
+
+    buildTermAgentPrompt(userInput: string): string {
+        const cwd = globalStore.get(getBlockMetaKeyAtom(this.blockId, "cmd:cwd"));
+        const connName = globalStore.get(getBlockMetaKeyAtom(this.blockId, "connection"));
+        const lastCommand = this.termRef.current?.lastCommandAtom
+            ? globalStore.get(this.termRef.current.lastCommandAtom)
+            : null;
+        const contextLines = [`block_id: ${this.blockId}`];
+        if (connName) {
+            contextLines.push(`connection: ${connName}`);
+        }
+        if (cwd) {
+            contextLines.push(`cwd: ${cwd}`);
+        }
+        if (lastCommand) {
+            contextLines.push(`last_command: ${lastCommand}`);
+        }
+        return [
+            "You are the native in-terminal agent inside Crest.",
+            "The user invoked you from a terminal overlay. Use tab context and tools when needed.",
+            "If a tool action needs approval, wait for the user to approve it in the overlay.",
+            "",
+            "<terminal_context>",
+            ...contextLines,
+            "</terminal_context>",
+            "",
+            "<user_request>",
+            userInput,
+            "</user_request>",
+        ].join("\n");
+    }
+
+    async submitTermAgentPrompt(): Promise<void> {
+        const userInput = globalStore.get(this.termAgentInput).trim();
+        if (userInput === "") {
+            this.closeTermAgentComposer();
+            return;
+        }
+        if (this.termAgentChatStatus === "streaming" || this.termAgentChatStatus === "submitted") {
+            return;
+        }
+        if (!this.termAgentSendMessage) {
+            this.setTermAgentError("Terminal agent is still initializing.");
+            return;
+        }
+        const aiMode = this.getTermAgentMode();
+        if (!aiMode) {
+            this.setTermAgentError("Configure an AI mode and API key before using the terminal agent.");
+            return;
+        }
+        if (userInput === "clear" || userInput === "new") {
+            this.clearTermAgentSession();
+            this.closeTermAgentComposer();
+            globalStore.set(this.termAgentVisible, true);
+            return;
+        }
+
+        this.termAgentRealMessage = {
+            messageid: crypto.randomUUID(),
+            parts: [{ type: "text", text: this.buildTermAgentPrompt(userInput) }],
+        };
+        globalStore.set(this.termAgentVisible, true);
+        globalStore.set(this.termAgentError, null);
+        this.closeTermAgentComposer();
+
+        try {
+            await this.termAgentSendMessage({
+                parts: [{ type: "text", text: userInput }] as any,
+            });
+        } catch (error) {
+            console.error("failed to submit terminal agent prompt", error);
+            const message = error instanceof Error ? error.message : String(error);
+            this.setTermAgentError(message);
+        }
+    }
+
     setTermMode(mode: "term" | "vdom") {
         if (mode == "term") {
             mode = null;
@@ -697,10 +869,87 @@ export class TermViewModel implements ViewModel {
         return isWindows();
     }
 
+    handleTermAgentKeydown(event: KeyboardEvent): boolean {
+        const waveEvent = keyutil.adaptFromReactOrNativeKeyEvent(event);
+        const overlayVisible = globalStore.get(this.termAgentVisible);
+        const composerOpen = globalStore.get(this.termAgentComposerOpen);
+
+        if (composerOpen) {
+            if (keyutil.checkKeyPressed(waveEvent, "Escape")) {
+                this.closeTermAgentComposer();
+                event.preventDefault();
+                event.stopPropagation();
+                return true;
+            }
+            if (keyutil.checkKeyPressed(waveEvent, "Enter")) {
+                event.preventDefault();
+                event.stopPropagation();
+                fireAndForget(() => this.submitTermAgentPrompt());
+                return true;
+            }
+            if (keyutil.checkKeyPressed(waveEvent, "Backspace")) {
+                const currentInput = globalStore.get(this.termAgentInput);
+                globalStore.set(this.termAgentInput, currentInput.slice(0, -1));
+                event.preventDefault();
+                event.stopPropagation();
+                return true;
+            }
+            if (keyutil.isCharacterKeyEvent(waveEvent)) {
+                const currentInput = globalStore.get(this.termAgentInput);
+                globalStore.set(this.termAgentInput, currentInput + waveEvent.key);
+                event.preventDefault();
+                event.stopPropagation();
+                return true;
+            }
+            if (
+                keyutil.checkKeyPressed(waveEvent, "Ctrl:Shift:v") ||
+                keyutil.checkKeyPressed(waveEvent, "Cmd:v") ||
+                (this.shouldHandleCtrlVPaste() && keyutil.checkKeyPressed(waveEvent, "Ctrl:v"))
+            ) {
+                event.preventDefault();
+                event.stopPropagation();
+                navigator.clipboard
+                    .readText()
+                    .then((text) => {
+                        if (!text) {
+                            return;
+                        }
+                        const currentInput = globalStore.get(this.termAgentInput);
+                        globalStore.set(this.termAgentInput, currentInput + text);
+                    })
+                    .catch((err) => {
+                        console.error("failed to paste into terminal agent", err);
+                    });
+                return true;
+            }
+            return false;
+        }
+
+        if (overlayVisible && keyutil.checkKeyPressed(waveEvent, "Escape")) {
+            this.hideTermAgentOverlay();
+            event.preventDefault();
+            event.stopPropagation();
+            return true;
+        }
+
+        if (keyutil.isCharacterKeyEvent(waveEvent) && waveEvent.key === ":" && this.canOpenTermAgent()) {
+            this.openTermAgentComposer();
+            event.preventDefault();
+            event.stopPropagation();
+            return true;
+        }
+
+        return false;
+    }
+
     handleTerminalKeydown(event: KeyboardEvent): boolean {
         const waveEvent = keyutil.adaptFromReactOrNativeKeyEvent(event);
         if (waveEvent.type != "keydown") {
             return true;
+        }
+
+        if (this.handleTermAgentKeydown(event)) {
+            return false;
         }
 
         if (this.keyDownHandler(waveEvent)) {

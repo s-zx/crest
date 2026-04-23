@@ -75,6 +75,9 @@ func (t *Tracker) OnBytes(ctx context.Context, chunk []byte) {
 	}
 	t.detectAltScreen(chunk)
 	t.detectOsc7(ctx, chunk)
+	t.detectOsc9(chunk)
+	t.detectOsc99(chunk)
+	t.detectOsc777(chunk)
 	t.detectClear(chunk, clearThroughOID)
 }
 

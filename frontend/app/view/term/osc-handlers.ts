@@ -356,6 +356,7 @@ export function handleOsc16162Command(data: string, blockId: string, loaded: boo
         case "I":
             if (cmd.data.inputempty != null) {
                 rtInfo["shell:inputempty"] = cmd.data.inputempty;
+                globalStore.set(termWrap.shellInputEmptyAtom, cmd.data.inputempty);
             }
             break;
         case "R":

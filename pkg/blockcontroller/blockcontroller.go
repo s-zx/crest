@@ -462,7 +462,12 @@ func makeSwapToken(ctx context.Context, logCtx context.Context, blockId string, 
 		Env:   make(map[string]string),
 		Exp:   time.Now().Add(5 * time.Minute),
 	}
-	token.Env["TERM_PROGRAM"] = "crest"
+	// Advertise as iTerm2 so AI coding agents (Claude Code et al.) auto-enable
+	// OSC-9 desktop notifications.  Their "auto" detection requires a known
+	// terminal identifier; "crest" would return "no_method_available" and the
+	// user would have to set preferredNotifChannel manually.  Our own tools
+	// identify us via WAVETERM/WAVETERM_VERSION instead.
+	token.Env["TERM_PROGRAM"] = "iTerm.app"
 	token.Env["WAVETERM_BLOCKID"] = blockId
 	token.Env["WAVETERM_VERSION"] = wavebase.WaveVersion
 	token.Env["WAVETERM"] = "1"

@@ -45,6 +45,20 @@ type CmdBlockClearEvent struct {
 	ThroughOID string `json:"throughoid,omitempty"`
 }
 
+// CmdBlockNotifyEvent is published on cmdblock:notify when the running
+// process emits an OSC 9 / 99 / 777 notification escape sequence.  These are
+// commonly used by AI coding agents (Claude Code, Aider, etc.) to signal task
+// completion back to the terminal; for Claude Code in particular, enabling
+// "Send notification" in its settings causes it to emit OSC 9 when a turn
+// finishes or user attention is needed.  The frontend turns these into the
+// in-app notification feed + corner toast.
+type CmdBlockNotifyEvent struct {
+	BlockID string `json:"blockid"`
+	OID     string `json:"oid,omitempty"`
+	Title   string `json:"title,omitempty"`
+	Body    string `json:"body"`
+}
+
 // CmdBlock is one shell-command lifecycle tracked inside a terminal block.
 //
 // Each row covers the span from OSC 16162;A (prompt appeared) to OSC 16162;D

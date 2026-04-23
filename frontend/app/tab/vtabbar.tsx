@@ -3,8 +3,10 @@
 
 import { Tooltip } from "@/app/element/tooltip";
 import { getTabBadgeAtom } from "@/app/store/badge";
+import { ContextMenuModel } from "@/app/store/contextmenu";
 import { getApi } from "@/app/store/global";
 import { getTabModelByTabId } from "@/app/store/tab-model";
+import { TabCmdStateStore, getTabRunningKind } from "@/app/store/tabcmdstate";
 import { makeORef } from "@/app/store/wos";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
@@ -129,6 +131,10 @@ function VTabWrapper({
     const badges = useAtomValue(getTabBadgeAtom(tabId, env));
     const renameRef = useRef<(() => void) | null>(null);
     const tabModel = getTabModelByTabId(tabId, env);
+    const tabCmdStore = TabCmdStateStore.getInstance();
+    useEffect(() => { tabCmdStore.ensureSubscribed(); }, []);
+    const blockCmdState = useAtomValue(tabCmdStore.blockCmdStateAtom);
+    const runningKind = getTabRunningKind(tabData?.blockids ?? [], blockCmdState);
 
     useEffect(() => {
         const cb = () => renameRef.current?.();
@@ -214,6 +220,7 @@ function VTabWrapper({
         gitAdds: isRepo ? gitInfo?.additions : undefined,
         gitDels: isRepo ? gitInfo?.deletions : undefined,
         gitChangedFiles: isRepo ? gitInfo?.changedfiles : undefined,
+        runningKind,
     };
 
     const handleContextMenu = useCallback(
@@ -222,6 +229,31 @@ function VTabWrapper({
             e.stopPropagation();
             const menu = buildTabContextMenu(tabId, renameRef, () => onClose(), env);
             env.showContextMenu(menu, e);
+        },
+        [tabId, onClose, env]
+    );
+
+    // Toggle + offset for the "..." button: open the menu anchored just below
+    // the button; clicking while open closes it.  Native menus don't expose an
+    // "is open" state, so we track when the last menu closed (Electron fires
+    // the callback via contextmenu-click null on outside-click).  If a click
+    // on the button lands within MoreBtnToggleMs of that close, we treat it
+    // as the close action and skip reopening.
+    const menuClosedAtRef = useRef<number>(0);
+    const handleMoreButtonClick = useCallback(
+        (e: React.MouseEvent<HTMLButtonElement>) => {
+            const MoreBtnToggleMs = 200;
+            if (Date.now() - menuClosedAtRef.current < MoreBtnToggleMs) {
+                return;
+            }
+            const rect = e.currentTarget.getBoundingClientRect();
+            const menu = buildTabContextMenu(tabId, renameRef, () => onClose(), env);
+            ContextMenuModel.getInstance().showContextMenu(menu, e, {
+                position: { x: rect.left, y: rect.bottom + 12 },
+                onCancel: () => {
+                    menuClosedAtRef.current = Date.now();
+                },
+            });
         },
         [tabId, onClose, env]
     );
@@ -238,6 +270,7 @@ function VTabWrapper({
             onClose={onClose}
             onRename={onRename}
             onContextMenu={handleContextMenu}
+            onMoreButtonClick={handleMoreButtonClick}
             onDragStart={onDragStart}
             onDragOver={onDragOver}
             onDrop={onDrop}

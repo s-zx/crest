@@ -448,7 +448,7 @@ function convertMenuDefArrToMenu(
 
 electron.ipcMain.on(
     "contextmenu-show",
-    (event, workspaceOrBuilderId: string, menuDefArr: ElectronContextMenuItem[]) => {
+    (event, workspaceOrBuilderId: string, menuDefArr: ElectronContextMenuItem[], position?: { x: number; y: number }) => {
         const webContents = getWebContentsByWorkspaceOrBuilderId(workspaceOrBuilderId);
         if (!webContents) {
             console.error("invalid window for context menu:", workspaceOrBuilderId);
@@ -463,13 +463,23 @@ electron.ipcMain.on(
         fireAndForget(async () => {
             const menuState = { hasClick: false };
             const menu = convertMenuDefArrToMenu(webContents, menuDefArr, menuState);
-            menu.popup({
+            const popupOpts: Electron.PopupOptions = {
                 callback: () => {
                     if (!menuState.hasClick) {
                         webContents.send("contextmenu-click", null);
                     }
                 },
-            });
+            };
+            if (position && position.x != null && position.y != null) {
+                const browserWindow = electron.BrowserWindow.fromWebContents(webContents);
+                if (browserWindow) {
+                    popupOpts.window = browserWindow;
+                }
+                const zoom = webContents.getZoomFactor() || 1;
+                popupOpts.x = Math.round(position.x * zoom);
+                popupOpts.y = Math.round(position.y * zoom);
+            }
+            menu.popup(popupOpts);
         });
         event.returnValue = true;
     }

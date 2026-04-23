@@ -240,10 +240,7 @@ export class PreviewModel implements ViewModel {
             const isCeView = loadableSV.state == "hasData" && loadableSV.data.specializedView == "codeedit";
             const loadableFileInfo = get(this.loadableFileInfo);
             if (loadableFileInfo.state == "hasData") {
-                headerPath = loadableFileInfo.data?.path;
-                if (headerPath == "~") {
-                    headerPath = `~ (${loadableFileInfo.data?.dir + "/" + loadableFileInfo.data?.name})`;
-                }
+                headerPath = loadableFileInfo.data?.name || loadableFileInfo.data?.path;
             }
             if (!isBlank(headerPath) && headerPath != "/" && headerPath.endsWith("/")) {
                 headerPath = headerPath.slice(0, -1);

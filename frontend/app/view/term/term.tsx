@@ -22,6 +22,7 @@ import debug from "debug";
 import * as jotai from "jotai";
 import * as React from "react";
 import { TermLinkTooltip } from "./term-tooltip";
+import { TermAgentOverlay } from "./term-agent";
 import { TermStickers } from "./termsticker";
 import { TermThemeUpdater } from "./termtheme";
 import { computeTheme, normalizeCursorStyle } from "./termutil";
@@ -393,6 +394,7 @@ const TerminalView = ({ blockId, model }: ViewComponentProps<TermViewModel>) => 
             <TermToolbarVDomNode key="vdom-toolbar" blockId={blockId} model={model} />
             <TermVDomNode key="vdom" blockId={blockId} model={model} />
             <div key="connect-elem" className="term-connectelem" ref={connectElemRef} />
+            <TermAgentOverlay model={model} />
             <NullErrorBoundary debugName="TermLinkTooltip">
                 <TermLinkTooltip termWrap={termWrapInst} />
             </NullErrorBoundary>

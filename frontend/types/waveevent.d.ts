@@ -30,6 +30,7 @@ declare global {
         | "cmdblock:chunk"
         | "cmdblock:altscreen"
         | "cmdblock:clear"
+        | "cmdblock:notify"
     ;
 
     type WaveEvent = {
@@ -61,7 +62,8 @@ declare global {
         { event: "cmdblock:row"; data?: CmdBlock; } | 
         { event: "cmdblock:chunk"; data?: CmdBlockChunkEvent; } | 
         { event: "cmdblock:altscreen"; data?: CmdBlockAltScreenEvent; } | 
-        { event: "cmdblock:clear"; data?: CmdBlockClearEvent; }
+        { event: "cmdblock:clear"; data?: CmdBlockClearEvent; } | 
+        { event: "cmdblock:notify"; data?: CmdBlockNotifyEvent; }
     );
 
 }

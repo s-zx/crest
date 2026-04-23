@@ -10,6 +10,7 @@ import { TabRpcClient } from "@/app/store/wshrpcutil";
 import { buildTermSettingsMenuItems } from "@/app/view/term/term-settings-menu";
 import { computeTheme } from "@/app/view/term/termutil";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
+import { FolderIcon } from "@/app/fileexplorer/file-icons";
 import { atoms } from "@/store/global";
 import { base64ToArray, cn, stringToBase64 } from "@/util/util";
 import { formatRemoteUri } from "@/util/waveutil";
@@ -180,6 +181,7 @@ export class TermBlocksViewModel implements ViewModel {
                 handler: (ev) => {
                     const data = ev.data as CmdBlockAltScreenEvent | undefined;
                     if (data == null) return;
+                    console.log("[cd-bug] cmdblock:altscreen event", { enter: data.enter, oid: data.oid, blockId });
                     globalStore.set(this.altScreenOIDAtom, data.enter ? data.oid || "ALT" : "");
                 },
             })
@@ -534,22 +536,32 @@ const AltScreenXterm: React.FC<{
 
     React.useEffect(() => {
         const host = containerRef.current;
+        console.log("[cd-bug] AltScreenXterm mount", { hasHost: host != null, hostRect: host?.getBoundingClientRect() });
         if (host == null) return;
-        const term = new Terminal({
-            convertEol: false,
-            cursorBlink: true,
-            fontFamily: "ui-monospace, Menlo, Consolas, monospace",
-            fontSize: fontSizeRef.current,
-            theme: themeRef.current,
-        });
-        const fit = new FitAddon();
-        term.loadAddon(fit);
-        term.open(host);
+        let term: Terminal;
+        let fit: FitAddon;
+        try {
+            term = new Terminal({
+                convertEol: false,
+                cursorBlink: true,
+                fontFamily: "ui-monospace, Menlo, Consolas, monospace",
+                fontSize: fontSizeRef.current,
+                theme: themeRef.current,
+            });
+            fit = new FitAddon();
+            term.loadAddon(fit);
+            term.open(host);
+            console.log("[cd-bug] AltScreenXterm opened", { rows: term.rows, cols: term.cols });
+        } catch (err) {
+            console.error("[cd-bug] AltScreenXterm init failed", err);
+            return;
+        }
 
         const pushSize = () => {
             try {
                 fit.fit();
-            } catch {
+            } catch (err) {
+                console.warn("[cd-bug] AltScreenXterm fit.fit failed", err);
                 return;
             }
             const t = termRef.current;
@@ -590,20 +602,28 @@ const AltScreenXterm: React.FC<{
 
     React.useEffect(() => {
         const term = termRef.current;
-        if (term == null) return;
+        if (term == null) {
+            console.log("[cd-bug] AltScreenXterm write skipped (no term)", { bytesLen: bytes.length });
+            return;
+        }
         const written = writtenRef.current;
         if (bytes.length === written) {
             return;
         }
-        if (bytes.length < written) {
-            term.reset();
-            term.write(bytes);
-        } else if (written === 0) {
-            term.write(bytes);
-        } else {
-            term.write(bytes.subarray(written));
+        console.log("[cd-bug] AltScreenXterm writing", { written, newLen: bytes.length, delta: bytes.length - written });
+        try {
+            if (bytes.length < written) {
+                term.reset();
+                term.write(bytes);
+            } else if (written === 0) {
+                term.write(bytes);
+            } else {
+                term.write(bytes.subarray(written));
+            }
+            writtenRef.current = bytes.length;
+        } catch (err) {
+            console.error("[cd-bug] AltScreenXterm write failed", err);
         }
-        writtenRef.current = bytes.length;
     }, [bytes]);
 
     return <div className="termblocks-altscreen" ref={containerRef} />;
@@ -1063,6 +1083,13 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
     const draftRef = React.useRef<string>("");
     const [value, setValue] = React.useState("");
 
+    // The input is unmounted while a command runs (see TermBlocksView) and
+    // remounted when the command finishes.  Auto-focus on mount so the user
+    // can immediately type the next command without clicking.
+    React.useEffect(() => {
+        inputRef.current?.focus();
+    }, []);
+
     // Ghost suggestion: latest history entry that starts with the typed prefix
     // but is strictly longer.  Shown dimmed after the caret; Tab/Right-arrow
     // accepts it.  Matches the "inline autosuggest" behaviour zsh-autosuggestions
@@ -1168,7 +1195,6 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
                     className="termblocks-input"
                     type="text"
                     value={value}
-                    autoFocus
                     spellCheck={false}
                     autoComplete="off"
                     onChange={(e) => {
@@ -1264,6 +1290,14 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
     if (inAltScreen) {
         const running = blocks.find((b) => b.state === "running") ?? blocks[blocks.length - 1];
         const bytes = running != null ? outputs[running.oid] ?? new Uint8Array() : new Uint8Array();
+        console.log("[cd-bug] TermBlocksView render alt-screen", {
+            blockId: model.blockId,
+            altOID,
+            runningOID: running?.oid,
+            runningCmd: running?.cmd,
+            bytesLen: bytes.length,
+            blocksCount: blocks.length,
+        });
         return (
             <div className="termblocks-root">
                 <div className="termblocks-altscreen-wrap">
@@ -1565,7 +1599,7 @@ const TermBlocksStatusBar: React.FC<{
             {shortCwd && (
                 <ChipPopover trigger={
                     <span className="termblocks-chip termblocks-chip-clickable" title={cwd}>
-                        <i className="fa-regular fa-folder termblocks-chip-icon" aria-hidden />
+                        <FolderIcon size={12} className="termblocks-chip-icon" aria-hidden />
                         {shortCwd}
                     </span>
                 }>

@@ -14,6 +14,7 @@ import { ErrorBoundary } from "@/element/errorboundary";
 import { CenteredDiv } from "@/element/quickelems";
 import { useDebouncedNodeInnerRect } from "@/layout/index";
 import { counterInc } from "@/store/counters";
+import { globalStore } from "@/app/store/jotaiStore";
 import { getBlockComponentModel, registerBlockComponentModel, unregisterBlockComponentModel } from "@/store/global";
 import { makeORef } from "@/store/wos";
 import { focusedBlockId, getElemAsStr } from "@/util/focusutil";
@@ -111,8 +112,14 @@ const BlockFull = memo(({ nodeModel, viewModel }: FullBlockProps) => {
     }, []);
 
     useLayoutEffect(() => {
-        setBlockClicked(isFocused);
-    }, [isFocused]);
+        if (!isFocused) {
+            return;
+        }
+        const focusWithin = focusedBlockId() == nodeModel.blockId;
+        if (!focusWithin) {
+            setFocusTarget();
+        }
+    }, [isFocused, nodeModel]);
 
     useLayoutEffect(() => {
         if (!blockClicked) {
@@ -123,10 +130,10 @@ const BlockFull = memo(({ nodeModel, viewModel }: FullBlockProps) => {
         if (!focusWithin) {
             setFocusTarget();
         }
-        if (!isFocused) {
+        if (!globalStore.get(nodeModel.isFocused)) {
             nodeModel.focusNode();
         }
-    }, [blockClicked, isFocused]);
+    }, [blockClicked, nodeModel]);
 
     const setBlockClickedTrue = useCallback(() => {
         setBlockClicked(true);
@@ -165,13 +172,12 @@ const BlockFull = memo(({ nodeModel, viewModel }: FullBlockProps) => {
 
     const handleChildFocus = useCallback(
         (event: React.FocusEvent<HTMLDivElement, Element>) => {
-            console.log("setFocusedChild", nodeModel.blockId, getElemAsStr(event.target));
-            if (!isFocused) {
-                console.log("focusedChild focus", nodeModel.blockId);
-                nodeModel.focusNode();
+            if (globalStore.get(nodeModel.isFocused)) {
+                return;
             }
+            nodeModel.focusNode();
         },
-        [isFocused]
+        [nodeModel]
     );
 
     const setFocusTarget = useCallback(() => {
@@ -180,6 +186,7 @@ const BlockFull = memo(({ nodeModel, viewModel }: FullBlockProps) => {
             pendingFocusRafRef.current = null;
         }
         const ok = viewModel?.giveFocus?.();
+        console.log("[cd-bug] setFocusTarget", { blockId: nodeModel.blockId, giveFocusOk: ok, activeEl: document.activeElement?.tagName });
         if (ok) {
             return;
         }
@@ -190,7 +197,7 @@ const BlockFull = memo(({ nodeModel, viewModel }: FullBlockProps) => {
                 viewModel?.giveFocus?.();
             }
         });
-    }, [viewModel]);
+    }, [viewModel, nodeModel]);
 
     const focusFromPointerEnter = useCallback(
         (event: React.PointerEvent<HTMLDivElement>) => {

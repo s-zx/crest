@@ -275,6 +275,14 @@ declare global {
         throughoid?: string;
     };
 
+    // cbtypes.CmdBlockNotifyEvent
+    type CmdBlockNotifyEvent = {
+        blockid: string;
+        oid?: string;
+        title?: string;
+        body: string;
+    };
+
     // wshrpc.CommandAuthenticateJobManagerData
     type CommandAuthenticateJobManagerData = {
         jobid: string;

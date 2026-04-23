@@ -100,6 +100,7 @@ export class TermWrap {
     lastUpdated: number;
     promptMarkers: TermTypes.IMarker[] = [];
     shellIntegrationStatusAtom: jotai.PrimitiveAtom<ShellIntegrationStatus | null>;
+    shellInputEmptyAtom: jotai.PrimitiveAtom<boolean | null>;
     lastCommandAtom: jotai.PrimitiveAtom<string | null>;
     claudeCodeActiveAtom: jotai.PrimitiveAtom<boolean>;
     nodeModel: BlockNodeModel; // this can be null
@@ -140,6 +141,7 @@ export class TermWrap {
         this.lastUpdated = Date.now();
         this.promptMarkers = [];
         this.shellIntegrationStatusAtom = jotai.atom(null) as jotai.PrimitiveAtom<ShellIntegrationStatus | null>;
+        this.shellInputEmptyAtom = jotai.atom(null) as jotai.PrimitiveAtom<boolean | null>;
         this.lastCommandAtom = jotai.atom(null) as jotai.PrimitiveAtom<string | null>;
         this.claudeCodeActiveAtom = jotai.atom(false);
         this.webglEnabledAtom = jotai.atom(false) as jotai.PrimitiveAtom<boolean>;
@@ -424,6 +426,7 @@ export class TermWrap {
             } else {
                 globalStore.set(this.shellIntegrationStatusAtom, null);
             }
+            globalStore.set(this.shellInputEmptyAtom, (rtInfo?.["shell:inputempty"] as boolean | undefined) ?? null);
 
             const lastCmd = rtInfo ? rtInfo["shell:lastcmd"] : null;
             const isCC = shellState === "running-command" && isClaudeCodeCommand(lastCmd);

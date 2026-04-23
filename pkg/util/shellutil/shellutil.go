@@ -220,8 +220,9 @@ func WaveshellLocalEnvVars(termType string) map[string]string {
 	if termType != "" {
 		rtn["TERM"] = termType
 	}
-	// these are not necessary since they should be set with the swap token, but no harm in setting them here
-	rtn["TERM_PROGRAM"] = "crest"
+	// these are not necessary since they should be set with the swap token, but no harm in setting them here.
+	// Advertise as iTerm2 — see comment in blockcontroller.makeSwapToken.
+	rtn["TERM_PROGRAM"] = "iTerm.app"
 	if os.Getenv("COLORTERM") == "" {
 		rtn["COLORTERM"] = "truecolor"
 	}
