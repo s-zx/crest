@@ -142,6 +142,14 @@ func shouldUseChatCompletionsAPI(model string) bool {
 		strings.HasPrefix(m, "o1-")
 }
 
+// GetWaveAISettings is the exported entrypoint used by pkg/agent. It wraps
+// the private getWaveAISettings helper with the standard premium-detection
+// and non-builder defaults so external packages don't need to know about
+// those knobs.
+func GetWaveAISettings(rtInfo waveobj.ObjRTInfo, aiModeName string) (*uctypes.AIOptsType, error) {
+	return getWaveAISettings(shouldUsePremium(), false, rtInfo, aiModeName)
+}
+
 func shouldUsePremium() bool {
 	info := GetGlobalRateLimit()
 	if info == nil || info.Unknown {

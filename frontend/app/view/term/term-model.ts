@@ -90,11 +90,14 @@ export class TermViewModel implements ViewModel {
     termAgentInput: jotai.PrimitiveAtom<string>;
     termAgentError: jotai.PrimitiveAtom<string | null>;
     termAgentChatId: jotai.PrimitiveAtom<string>;
+    termAgentAgentMode: jotai.Atom<"ask" | "plan" | "do">;
     termAgentSendMessage: UseChatSendMessageType | null;
     termAgentSetMessages: UseChatSetMessagesType | null;
     termAgentStop: (() => void) | null;
     termAgentChatStatus: string;
     termAgentRealMessage: any | null;
+    termAgentPendingMode: "ask" | "plan" | "do";
+    termAgentPendingContext: { cwd?: string; connection?: string; last_command?: string };
     searchAtoms?: SearchAtoms;
 
     constructor({ blockId, nodeModel, tabModel }: ViewModelInitType) {
@@ -124,11 +127,20 @@ export class TermViewModel implements ViewModel {
         this.termAgentInput = jotai.atom("") as jotai.PrimitiveAtom<string>;
         this.termAgentError = jotai.atom(null) as jotai.PrimitiveAtom<string | null>;
         this.termAgentChatId = jotai.atom(crypto.randomUUID()) as jotai.PrimitiveAtom<string>;
+        this.termAgentAgentMode = jotai.atom((get) => {
+            const input = get(this.termAgentInput);
+            if (input.startsWith("ask ") || input === "ask") return "ask";
+            if (input.startsWith("plan ") || input === "plan") return "plan";
+            if (input.startsWith("do ") || input === "do") return "do";
+            return "do";
+        });
         this.termAgentSendMessage = null;
         this.termAgentSetMessages = null;
         this.termAgentStop = null;
         this.termAgentChatStatus = "ready";
         this.termAgentRealMessage = null;
+        this.termAgentPendingMode = "do";
+        this.termAgentPendingContext = {};
         this.viewIcon = jotai.atom((get) => {
             const termMode = get(this.termMode);
             if (termMode == "vdom") {
@@ -551,6 +563,38 @@ export class TermViewModel implements ViewModel {
         return msg;
     }
 
+    getAndClearTermAgentPendingMode(): string {
+        const mode = this.termAgentPendingMode;
+        this.termAgentPendingMode = "do";
+        return mode;
+    }
+
+    getAndClearTermAgentPendingContext(): { cwd?: string; connection?: string; last_command?: string } {
+        const ctx = this.termAgentPendingContext;
+        this.termAgentPendingContext = {};
+        return ctx;
+    }
+
+    parseTermAgentInput(input: string): { mode: "ask" | "plan" | "do"; stripped: string } {
+        if (input.startsWith("ask ")) return { mode: "ask", stripped: input.slice(4) };
+        if (input.startsWith("plan ")) return { mode: "plan", stripped: input.slice(5) };
+        if (input.startsWith("do ")) return { mode: "do", stripped: input.slice(3) };
+        return { mode: "do", stripped: input };
+    }
+
+    buildTermAgentContext(): { cwd?: string; connection?: string; last_command?: string } {
+        const cwd = globalStore.get(getBlockMetaKeyAtom(this.blockId, "cmd:cwd"));
+        const connName = globalStore.get(getBlockMetaKeyAtom(this.blockId, "connection"));
+        const lastCommand = this.termRef.current?.lastCommandAtom
+            ? globalStore.get(this.termRef.current.lastCommandAtom)
+            : null;
+        const out: { cwd?: string; connection?: string; last_command?: string } = {};
+        if (typeof cwd === "string" && cwd) out.cwd = cwd;
+        if (typeof connName === "string" && connName) out.connection = connName;
+        if (typeof lastCommand === "string" && lastCommand) out.last_command = lastCommand;
+        return out;
+    }
+
     setTermAgentError(message: string | null) {
         globalStore.set(this.termAgentError, message);
     }
@@ -609,37 +653,6 @@ export class TermViewModel implements ViewModel {
         return shellState === "ready" && inputEmpty === true;
     }
 
-    buildTermAgentPrompt(userInput: string): string {
-        const cwd = globalStore.get(getBlockMetaKeyAtom(this.blockId, "cmd:cwd"));
-        const connName = globalStore.get(getBlockMetaKeyAtom(this.blockId, "connection"));
-        const lastCommand = this.termRef.current?.lastCommandAtom
-            ? globalStore.get(this.termRef.current.lastCommandAtom)
-            : null;
-        const contextLines = [`block_id: ${this.blockId}`];
-        if (connName) {
-            contextLines.push(`connection: ${connName}`);
-        }
-        if (cwd) {
-            contextLines.push(`cwd: ${cwd}`);
-        }
-        if (lastCommand) {
-            contextLines.push(`last_command: ${lastCommand}`);
-        }
-        return [
-            "You are the native in-terminal agent inside Crest.",
-            "The user invoked you from a terminal overlay. Use tab context and tools when needed.",
-            "If a tool action needs approval, wait for the user to approve it in the overlay.",
-            "",
-            "<terminal_context>",
-            ...contextLines,
-            "</terminal_context>",
-            "",
-            "<user_request>",
-            userInput,
-            "</user_request>",
-        ].join("\n");
-    }
-
     async submitTermAgentPrompt(): Promise<void> {
         const userInput = globalStore.get(this.termAgentInput).trim();
         if (userInput === "") {
@@ -665,17 +678,25 @@ export class TermViewModel implements ViewModel {
             return;
         }
 
+        const { mode, stripped } = this.parseTermAgentInput(userInput);
+        if (stripped.trim() === "") {
+            // User typed just a mode prefix with no content; keep composer open.
+            return;
+        }
+
         this.termAgentRealMessage = {
             messageid: crypto.randomUUID(),
-            parts: [{ type: "text", text: this.buildTermAgentPrompt(userInput) }],
+            parts: [{ type: "text", text: stripped }],
         };
+        this.termAgentPendingMode = mode;
+        this.termAgentPendingContext = this.buildTermAgentContext();
         globalStore.set(this.termAgentVisible, true);
         globalStore.set(this.termAgentError, null);
         this.closeTermAgentComposer();
 
         try {
             await this.termAgentSendMessage({
-                parts: [{ type: "text", text: userInput }] as any,
+                parts: [{ type: "text", text: stripped }] as any,
             });
         } catch (error) {
             console.error("failed to submit terminal agent prompt", error);

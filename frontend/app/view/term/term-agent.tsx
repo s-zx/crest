@@ -189,20 +189,23 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
     const composerOpen = jotai.useAtomValue(model.termAgentComposerOpen);
     const inputValue = jotai.useAtomValue(model.termAgentInput);
     const errorText = jotai.useAtomValue(model.termAgentError);
+    const agentMode = jotai.useAtomValue(model.termAgentAgentMode);
     const scrollRef = useRef<HTMLDivElement>(null);
 
     const transport = useMemo(
         () =>
             new DefaultChatTransport({
-                api: `${getWebServerEndpoint()}/api/post-chat-message`,
+                api: `${getWebServerEndpoint()}/api/post-agent-message`,
                 prepareSendMessagesRequest: () => {
                     return {
                         body: {
                             msg: model.getAndClearTermAgentMessage(),
                             chatid: globalStore.get(model.termAgentChatId),
-                            widgetaccess: true,
                             aimode: model.getTermAgentMode(),
                             tabid: model.tabModel.tabId,
+                            blockid: model.blockId,
+                            mode: model.getAndClearTermAgentPendingMode(),
+                            context: model.getAndClearTermAgentPendingContext(),
                         },
                     };
                 },
@@ -236,7 +239,7 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
         return null;
     }
 
-    const mode = model.getTermAgentMode() || "unconfigured";
+    const mode = agentMode;
 
     return (
         <div className="pointer-events-none absolute inset-x-3 bottom-3 z-[var(--zindex-block-mask-inner)] flex justify-center">

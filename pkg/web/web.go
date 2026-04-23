@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/wavetermdev/waveterm/pkg/agent"
 	"github.com/wavetermdev/waveterm/pkg/aiusechat"
 	"github.com/wavetermdev/waveterm/pkg/authkey"
 	"github.com/wavetermdev/waveterm/pkg/filestore"
@@ -452,6 +453,7 @@ func RunWebServer(listener net.Listener) {
 	gr.HandleFunc("/wave/stream-file", WebFnWrap(WebFnOpts{AllowCaching: true}, handleStreamFile))
 	gr.PathPrefix("/wave/stream-file/").HandlerFunc(WebFnWrap(WebFnOpts{AllowCaching: true}, handleStreamFile))
 	gr.HandleFunc("/api/post-chat-message", WebFnWrap(WebFnOpts{AllowCaching: false}, aiusechat.WaveAIPostMessageHandler))
+	gr.HandleFunc("/api/post-agent-message", WebFnWrap(WebFnOpts{AllowCaching: false}, agent.PostAgentMessageHandler))
 
 	// Non-streaming /wave/ routes get timeout protection
 	waveRouter := mux.NewRouter()
