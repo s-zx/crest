@@ -36,6 +36,8 @@ export type TermAgentModel = {
     clearTermAgentSession(): void;
     hideTermAgentOverlay(): void;
     setTermAgentError(message: string | null): void;
+    submitTermAgentPrompt(): Promise<void>;
+    closeTermAgentComposer(): void;
 };
 
 type TermAgentOverlayProps = {
@@ -214,6 +216,7 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
     const errorText = jotai.useAtomValue(model.termAgentError);
     const agentMode = jotai.useAtomValue(model.termAgentAgentMode);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const composerInputRef = useRef<HTMLInputElement>(null);
 
     const transport = useMemo(
         () =>
@@ -321,13 +324,27 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
 
                 <div className="border-t border-zinc-800 px-3 py-3">
                     {composerOpen ? (
-                        <div className="rounded-xl border border-zinc-700/80 bg-black/20 px-3 py-2 font-mono text-sm text-zinc-100">
-                            <span className="mr-2 text-[var(--color-accent)]">:</span>
-                            {inputValue.length > 0 ? (
-                                <span className="whitespace-pre-wrap break-words">{inputValue}</span>
-                            ) : (
-                                <span className="text-zinc-500">help me build this feature</span>
-                            )}
+                        <div className="flex items-center gap-2 rounded-xl border border-zinc-700/80 bg-black/20 px-3 py-2 font-mono text-sm">
+                            <span className="text-[var(--color-accent)]">:</span>
+                            <input
+                                ref={composerInputRef}
+                                type="text"
+                                className="flex-1 bg-transparent text-zinc-100 outline-none placeholder:text-zinc-500"
+                                value={inputValue}
+                                placeholder="ask hello / plan a feature / do run tests"
+                                autoFocus
+                                onChange={(e) => globalStore.set(model.termAgentInput, e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                        e.preventDefault();
+                                        model.submitTermAgentPrompt();
+                                    }
+                                    if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        model.closeTermAgentComposer();
+                                    }
+                                }}
+                            />
                         </div>
                     ) : (
                         <div className="text-xs text-zinc-500">Press `:` at an empty prompt to continue this session.</div>
