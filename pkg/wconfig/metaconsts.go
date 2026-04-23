@@ -26,6 +26,7 @@ const (
 	ConfigKey_AiApiType                      = "ai:apitype"
 	ConfigKey_AiBaseURL                      = "ai:baseurl"
 	ConfigKey_AiApiToken                     = "ai:apitoken"
+	ConfigKey_AiApiTokenSecretName           = "ai:apitokensecretname"
 	ConfigKey_AiName                         = "ai:name"
 	ConfigKey_AiModel                        = "ai:model"
 	ConfigKey_AiOrgID                        = "ai:orgid"

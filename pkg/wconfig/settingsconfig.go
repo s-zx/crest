@@ -38,12 +38,13 @@ const AnySchema = `
 
 // old AI Widget presets (deprecated)
 type AiSettingsType struct {
-	AiClear         bool    `json:"ai:*,omitempty"`
-	AiPreset        string  `json:"ai:preset,omitempty"`
-	AiApiType       string  `json:"ai:apitype,omitempty"`
-	AiBaseURL       string  `json:"ai:baseurl,omitempty"`
-	AiApiToken      string  `json:"ai:apitoken,omitempty"`
-	AiName          string  `json:"ai:name,omitempty"`
+	AiClear              bool    `json:"ai:*,omitempty"`
+	AiPreset             string  `json:"ai:preset,omitempty"`
+	AiApiType            string  `json:"ai:apitype,omitempty"`
+	AiBaseURL            string  `json:"ai:baseurl,omitempty"`
+	AiApiToken           string  `json:"ai:apitoken,omitempty"`
+	AiApiTokenSecretName string  `json:"ai:apitokensecretname,omitempty"`
+	AiName               string  `json:"ai:name,omitempty"`
 	AiModel         string  `json:"ai:model,omitempty"`
 	AiOrgID         string  `json:"ai:orgid,omitempty"`
 	AIApiVersion    string  `json:"ai:apiversion,omitempty"`
@@ -72,20 +73,21 @@ type SettingsType struct {
 
 	FeatureWaveAppBuilder bool `json:"feature:waveappbuilder,omitempty"`
 
-	AiClear         bool    `json:"ai:*,omitempty"`
-	AiPreset        string  `json:"ai:preset,omitempty"`
-	AiApiType       string  `json:"ai:apitype,omitempty"`
-	AiBaseURL       string  `json:"ai:baseurl,omitempty"`
-	AiApiToken      string  `json:"ai:apitoken,omitempty"`
-	AiName          string  `json:"ai:name,omitempty"`
-	AiModel         string  `json:"ai:model,omitempty"`
-	AiOrgID         string  `json:"ai:orgid,omitempty"`
-	AIApiVersion    string  `json:"ai:apiversion,omitempty"`
-	AiMaxTokens     float64 `json:"ai:maxtokens,omitempty"`
-	AiTimeoutMs     float64 `json:"ai:timeoutms,omitempty"`
-	AiProxyUrl      string  `json:"ai:proxyurl,omitempty"`
-	AiFontSize      float64 `json:"ai:fontsize,omitempty"`
-	AiFixedFontSize float64 `json:"ai:fixedfontsize,omitempty"`
+	AiClear              bool    `json:"ai:*,omitempty"`
+	AiPreset             string  `json:"ai:preset,omitempty"`
+	AiApiType            string  `json:"ai:apitype,omitempty"`
+	AiBaseURL            string  `json:"ai:baseurl,omitempty"`
+	AiApiToken           string  `json:"ai:apitoken,omitempty"`
+	AiApiTokenSecretName string  `json:"ai:apitokensecretname,omitempty"`
+	AiName               string  `json:"ai:name,omitempty"`
+	AiModel              string  `json:"ai:model,omitempty"`
+	AiOrgID              string  `json:"ai:orgid,omitempty"`
+	AIApiVersion         string  `json:"ai:apiversion,omitempty"`
+	AiMaxTokens          float64 `json:"ai:maxtokens,omitempty"`
+	AiTimeoutMs          float64 `json:"ai:timeoutms,omitempty"`
+	AiProxyUrl           string  `json:"ai:proxyurl,omitempty"`
+	AiFontSize           float64 `json:"ai:fontsize,omitempty"`
+	AiFixedFontSize      float64 `json:"ai:fixedfontsize,omitempty"`
 
 	WaveAiShowCloudModes bool   `json:"waveai:showcloudmodes,omitempty"`
 	WaveAiDefaultMode    string `json:"waveai:defaultmode,omitempty"`
@@ -192,8 +194,9 @@ func (s *SettingsType) GetAiSettings() *AiSettingsType {
 		AiPreset:        s.AiPreset,
 		AiApiType:       s.AiApiType,
 		AiBaseURL:       s.AiBaseURL,
-		AiApiToken:      s.AiApiToken,
-		AiName:          s.AiName,
+		AiApiToken:           s.AiApiToken,
+		AiApiTokenSecretName: s.AiApiTokenSecretName,
+		AiName:               s.AiName,
 		AiModel:         s.AiModel,
 		AiOrgID:         s.AiOrgID,
 		AIApiVersion:    s.AIApiVersion,
@@ -232,6 +235,9 @@ func MergeAiSettings(settings ...*AiSettingsType) *AiSettingsType {
 		}
 		if s.AiApiToken != "" {
 			result.AiApiToken = s.AiApiToken
+		}
+		if s.AiApiTokenSecretName != "" {
+			result.AiApiTokenSecretName = s.AiApiTokenSecretName
 		}
 		if s.AiName != "" {
 			result.AiName = s.AiName
