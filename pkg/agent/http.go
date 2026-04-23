@@ -9,10 +9,14 @@ import (
 	"log"
 	"net/http"
 
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/wavetermdev/waveterm/pkg/aiusechat"
 	"github.com/wavetermdev/waveterm/pkg/aiusechat/uctypes"
+	"github.com/wavetermdev/waveterm/pkg/secretstore"
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
+	"github.com/wavetermdev/waveterm/pkg/wconfig"
 	"github.com/wavetermdev/waveterm/pkg/web/sse"
 	"github.com/wavetermdev/waveterm/pkg/wstore"
 )
@@ -38,6 +42,66 @@ type AgentContext struct {
 	RecentCmds  []string `json:"recent_cmds,omitempty"`
 }
 
+// resolveAgentAIOpts tries the waveai mode system first (for users with
+// waveai.json modes configured). If that fails — e.g. because the mode is a
+// cloud mode requiring telemetry, or the user only configured settings.json —
+// it falls back to building AIOptsType directly from the global AI settings.
+func resolveAgentAIOpts(tabId string, aiMode string) (*uctypes.AIOptsType, error) {
+	if aiMode != "" {
+		rtInfo := &waveobj.ObjRTInfo{}
+		if tabId != "" {
+			oref := waveobj.MakeORef(waveobj.OType_Tab, tabId)
+			if gotInfo := wstore.GetRTInfo(oref); gotInfo != nil {
+				rtInfo = gotInfo
+			}
+		}
+		opts, err := aiusechat.GetWaveAISettings(*rtInfo, aiMode)
+		if err == nil {
+			return opts, nil
+		}
+	}
+	return buildAIOptsFromSettings()
+}
+
+func buildAIOptsFromSettings() (*uctypes.AIOptsType, error) {
+	fullConfig := wconfig.GetWatcher().GetFullConfig()
+	settings := fullConfig.Settings
+	apiType := settings.AiApiType
+	baseUrl := settings.AiBaseURL
+	model := settings.AiModel
+	if apiType == "" {
+		apiType = "openai-chat"
+	}
+	apiToken := settings.AiApiToken
+	if apiToken == "" && settings.AiApiTokenSecretName != "" {
+		secret, exists, err := secretstore.GetSecret(settings.AiApiTokenSecretName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve secret %s: %w", settings.AiApiTokenSecretName, err)
+		}
+		secret = strings.TrimSpace(secret)
+		if !exists || secret == "" {
+			return nil, fmt.Errorf("secret %s not found or empty — configure your API key in Settings → AI Provider", settings.AiApiTokenSecretName)
+		}
+		apiToken = secret
+	}
+	if apiToken == "" {
+		return nil, fmt.Errorf("no API key configured — open Settings → AI Provider to set one up")
+	}
+	if baseUrl == "" {
+		return nil, fmt.Errorf("no ai:baseurl configured — open Settings → AI Provider to set one up")
+	}
+	return &uctypes.AIOptsType{
+		APIType:       apiType,
+		Model:         model,
+		Endpoint:      baseUrl,
+		APIToken:      apiToken,
+		MaxTokens:     4096,
+		ThinkingLevel: uctypes.ThinkingLevelMedium,
+		Verbosity:     uctypes.VerbosityLevelMedium,
+		Capabilities:  []string{uctypes.AICapabilityTools},
+	}, nil
+}
+
 // PostAgentMessageHandler is the HTTP entrypoint for the native agent.
 // Wired in pkg/web/web.go at /api/post-agent-message.
 func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
@@ -59,11 +123,6 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "chatid must be a valid UUID", http.StatusBadRequest)
 		return
 	}
-	if req.AIMode == "" {
-		http.Error(w, "aimode is required in request body", http.StatusBadRequest)
-		return
-	}
-
 	mode, ok := LookupMode(req.Mode)
 	if !ok {
 		http.Error(w, fmt.Sprintf("unknown agent mode %q (valid: ask, plan, do)", req.Mode), http.StatusBadRequest)
@@ -75,15 +134,7 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rtInfo := &waveobj.ObjRTInfo{}
-	if req.TabId != "" {
-		oref := waveobj.MakeORef(waveobj.OType_Tab, req.TabId)
-		if gotInfo := wstore.GetRTInfo(oref); gotInfo != nil {
-			rtInfo = gotInfo
-		}
-	}
-
-	aiOpts, err := aiusechat.GetWaveAISettings(*rtInfo, req.AIMode)
+	aiOpts, err := resolveAgentAIOpts(req.TabId, req.AIMode)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("WaveAI configuration error: %v", err), http.StatusInternalServerError)
 		return
