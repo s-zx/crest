@@ -69,8 +69,18 @@ Branch: `feat/native-agent`
 - [x] All 4 tools wired into `ModeDo`, all require user approval
 - [x] 10 unit tests (input parsing, tool definitions, capabilities)
 
-### Remaining
-- [ ] Eval harness: golden transcript replay + terminal-bench tasks
+### Eval Harness ✅
+- [x] Golden transcript replay framework (`pkg/agent/eval/`)
+  - MockBackend implementing `UseChatBackend` — queued responses, real tool execution
+  - `RunGoldenTest()` engine — loads JSON transcripts, sets up temp workspace, runs with auto-approved tools
+  - `{{CWD}}` substitution for absolute paths in tool inputs
+  - `RunAllGoldenTests()` auto-discovers `*.golden.json` files
+  - 3 golden transcripts: `ask-read-file`, `ask-list-dir`, `do-write-file`
+  - 5 unit tests total
+- [x] Terminal-bench 2.0 Harbor adapter (`eval/harbor/`)
+  - `CrestAgent` installed agent — builds `wavesrv` in container, POSTs to agent HTTP API
+  - Prompt template, ATIF trajectory output, README with usage docs
+  - Runnable via `harbor run --agent-import-path eval.harbor.crest_agent:CrestAgent`
 
 ## Phase 3 — Stretch ⬜
 
@@ -93,3 +103,4 @@ Branch: `feat/native-agent`
 - **Skills** — `pkg/agent/skills.go` scans `.kilocode/skills/` at runtime, injects skill names + descriptions into the system prompt so the agent knows which guides are available.
 - **Module path** — `github.com/s-zx/crest` (renamed from `wavetermdev/waveterm`).
 - **Browser tools** — 4 tools (`browser.navigate/read_text/click/screenshot`) use Electron's webContents via RPC. Navigate updates block meta; read/click/screenshot route through `emain-wsh.ts` Electron handlers to the `<webview>` webContents.
+- **Eval harness** — `pkg/agent/eval/` provides golden transcript replay (mock LLM, real tools, JSON test cases). `eval/harbor/` provides a terminal-bench 2.0 adapter for running Crest on the Harbor benchmark framework.
