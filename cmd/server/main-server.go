@@ -34,7 +34,6 @@ import (
 	"github.com/wavetermdev/waveterm/pkg/util/utilfn"
 	"github.com/wavetermdev/waveterm/pkg/wavebase"
 	"github.com/wavetermdev/waveterm/pkg/waveobj"
-	"github.com/wavetermdev/waveterm/pkg/wcloud"
 	"github.com/wavetermdev/waveterm/pkg/wconfig"
 	"github.com/wavetermdev/waveterm/pkg/wcore"
 	"github.com/wavetermdev/waveterm/pkg/web"
@@ -155,17 +154,11 @@ func diagnosticLoop() {
 }
 
 func sendDiagnosticPing() bool {
-	ctx, cancelFn := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancelFn()
-
 	rpcClient := wshclient.GetBareRpcClient()
 	isOnline, err := wshclient.NetworkOnlineCommand(rpcClient, &wshrpc.RpcOpts{Route: "electron", Timeout: 2000})
 	if err != nil || !isOnline {
 		return false
 	}
-	clientId := wstore.GetClientId()
-	usageTelemetry := telemetry.IsTelemetryEnabled()
-	wcloud.SendDiagnosticPing(ctx, clientId, usageTelemetry)
 	return true
 }
 
@@ -181,7 +174,6 @@ func setupTelemetryConfigHandler() {
 		newTelemetryEnabled := newConfig.Settings.TelemetryEnabled
 		if newTelemetryEnabled != currentTelemetryEnabled {
 			currentTelemetryEnabled = newTelemetryEnabled
-			wcore.GoSendNoTelemetryUpdate(newTelemetryEnabled)
 		}
 	})
 }
@@ -221,11 +213,6 @@ func sendTelemetryWrapper() {
 	ctx, cancelFn := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancelFn()
 	beforeSendActivityUpdate(ctx)
-	clientId := wstore.GetClientId()
-	err := wcloud.SendAllTelemetry(clientId)
-	if err != nil {
-		log.Printf("[error] sending telemetry: %v\n", err)
-	}
 }
 
 func updateTelemetryCounts(lastCounts telemetrydata.TEventProps) telemetrydata.TEventProps {
@@ -405,11 +392,6 @@ func grabAndRemoveEnvVars() error {
 	if err != nil {
 		return err
 	}
-	err = wcloud.CacheAndRemoveEnvVars()
-	if err != nil {
-		return err
-	}
-
 	// Remove WAVETERM env vars that leak from prod => dev
 	os.Unsetenv("WAVETERM_CLIENTID")
 	os.Unsetenv("WAVETERM_WORKSPACEID")
