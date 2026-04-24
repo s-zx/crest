@@ -52,9 +52,14 @@ Branch: `feat/native-agent`
 - [x] System prompt updated with MCP tool guidance
 - [x] 7 unit tests for bridge (name parsing, tool conversion, error handling, text extraction)
 
+### Skills Integration ✅
+- [x] `pkg/agent/skills.go` — discovers `.kilocode/skills/*/SKILL.md`, parses YAML frontmatter
+- [x] `BuildSkillsContext()` injects `<available_skills>` block into system prompt
+- [x] Agent auto-discovers 8 skills (add-config, add-rpc, add-wshcmd, context-menu, create-view, electron-api, waveenv, wps-events)
+- [x] 7 unit tests (discovery, frontmatter parsing, context building, edge cases)
+
 ### Remaining
 - [ ] Browser tool implementation — CDP via `webContents.debugger`, fill `browser.*` stubs
-- [ ] Skills integration: `.kilocode/skills/` as agent-invokable library
 - [ ] Eval harness: golden transcript replay + terminal-bench tasks
 
 ## Phase 3 — Stretch ⬜
@@ -63,7 +68,7 @@ Branch: `feat/native-agent`
 - [ ] Conversation export/import (`.crest-agent.json`)
 - [ ] Local embedding-based repo search
 - [ ] Multi-block coordinated tasks, plan → execution handoff
-- [ ] Rename Go module path `wavetermdev/waveterm` → `s-zx/crest` (mechanical sed + regenerate, ~200 files)
+- [x] ~~Rename Go module path `wavetermdev/waveterm` → `s-zx/crest`~~ (done — 265 files, mechanical sed + regenerate)
 
 ## Architecture
 
@@ -75,3 +80,5 @@ Branch: `feat/native-agent`
 - **API keys via secretstore** — stored in OS keychain, referenced by `ai:apitokensecretname`.
 - **ForgeCode attribution**: Apache 2.0 preserved in `NOTICE` files + `UPSTREAM.md`.
 - **MCP client** — `pkg/agent/mcp/` manages external MCP server connections. Config via `ai:mcpservers` in `settings.json`. Tools namespaced as `mcp__<server>__<tool>`, always require approval.
+- **Skills** — `pkg/agent/skills.go` scans `.kilocode/skills/` at runtime, injects skill names + descriptions into the system prompt so the agent knows which guides are available.
+- **Module path** — `github.com/s-zx/crest` (renamed from `wavetermdev/waveterm`).
