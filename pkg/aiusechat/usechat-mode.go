@@ -5,13 +5,11 @@ package aiusechat
 
 import (
 	"fmt"
-	"log"
 	"regexp"
 
 	"github.com/wavetermdev/waveterm/pkg/aiusechat/aiutil"
 	"github.com/wavetermdev/waveterm/pkg/aiusechat/uctypes"
 	"github.com/wavetermdev/waveterm/pkg/wconfig"
-	"github.com/wavetermdev/waveterm/pkg/wps"
 )
 
 var AzureResourceNameRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
@@ -237,36 +235,3 @@ func getAIModeConfig(aiMode string) (*wconfig.AIModeConfigType, error) {
 	return &config, nil
 }
 
-func InitAIModeConfigWatcher() {
-	watcher := wconfig.GetWatcher()
-	watcher.RegisterUpdateHandler(handleConfigUpdate)
-	log.Printf("AI mode config watcher initialized\n")
-}
-
-func handleConfigUpdate(fullConfig wconfig.FullConfigType) {
-	resolvedConfigs := ComputeResolvedAIModeConfigs(fullConfig)
-	broadcastAIModeConfigs(resolvedConfigs)
-}
-
-func ComputeResolvedAIModeConfigs(fullConfig wconfig.FullConfigType) map[string]wconfig.AIModeConfigType {
-	resolvedConfigs := make(map[string]wconfig.AIModeConfigType)
-
-	for modeName, modeConfig := range fullConfig.WaveAIModes {
-		resolved := modeConfig
-		applyProviderDefaults(&resolved)
-		resolvedConfigs[modeName] = resolved
-	}
-
-	return resolvedConfigs
-}
-
-func broadcastAIModeConfigs(configs map[string]wconfig.AIModeConfigType) {
-	update := wconfig.AIModeConfigUpdate{
-		Configs: configs,
-	}
-
-	wps.Broker.Publish(wps.WaveEvent{
-		Event: wps.Event_AIModeConfig,
-		Data:  update,
-	})
-}

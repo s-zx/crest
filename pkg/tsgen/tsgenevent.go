@@ -37,7 +37,6 @@ var WaveEventDataTypes = map[string]reflect.Type{
 	wps.Event_WorkspaceUpdate:     nil,
 	wps.Event_WaveAppAppGoUpdated: nil,
 	wps.Event_TsunamiUpdateMeta:   reflect.TypeOf(wshrpc.AppMeta{}),
-	wps.Event_AIModeConfig:        reflect.TypeOf(wconfig.AIModeConfigUpdate{}),
 	wps.Event_BlockJobStatus:      reflect.TypeOf(wshrpc.BlockJobStatusData{}),
 	wps.Event_Badge:               reflect.TypeOf(baseds.BadgeEvent{}),
 	wps.Event_CmdBlockRow:         reflect.TypeOf((*cbtypes.CmdBlock)(nil)),

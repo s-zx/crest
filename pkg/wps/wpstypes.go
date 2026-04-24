@@ -30,7 +30,6 @@ const (
 	Event_WorkspaceUpdate     = "workspace:update"     // type: none
 	Event_WaveAppAppGoUpdated = "waveapp:appgoupdated" // type: none
 	Event_TsunamiUpdateMeta   = "tsunami:updatemeta"   // type: wshrpc.AppMeta
-	Event_AIModeConfig        = "waveai:modeconfig"    // type: wconfig.AIModeConfigUpdate
 	Event_BlockJobStatus      = "block:jobstatus"      // type: wshrpc.BlockJobStatusData
 	Event_Badge               = "badge"                // type: baseds.BadgeEvent
 	Event_CmdBlockRow         = "cmdblock:row"         // type: *cbtypes.CmdBlock
@@ -56,7 +55,6 @@ var AllEvents []string = []string{
 	Event_WorkspaceUpdate,
 	Event_WaveAppAppGoUpdated,
 	Event_TsunamiUpdateMeta,
-	Event_AIModeConfig,
 	Event_BlockJobStatus,
 	Event_Badge,
 	Event_CmdBlockRow,
