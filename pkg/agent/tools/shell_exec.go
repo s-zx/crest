@@ -97,6 +97,19 @@ func ShellExec(tabID, defaultBlockID, defaultCwd, defaultConnection string, appr
 			}
 			return fmt.Sprintf("running %q", truncCmd(parsed.Cmd))
 		},
+		ToolVerifyInput: func(input any, toolUseData *uctypes.UIMessageDataToolUse) error {
+			parsed, err := parseShellExecInput(input)
+			if err != nil {
+				return err
+			}
+			if dangerous, reason := IsDangerousCommand(parsed.Cmd); dangerous {
+				if toolUseData != nil {
+					toolUseData.Approval = uctypes.ApprovalNeedsApproval
+					toolUseData.ToolDesc = fmt.Sprintf("DANGEROUS: %s — %q", reason, truncCmd(parsed.Cmd))
+				}
+			}
+			return nil
+		},
 		ToolAnyCallback: func(input any, toolUseData *uctypes.UIMessageDataToolUse) (any, error) {
 			parsed, err := parseShellExecInput(input)
 			if err != nil {
