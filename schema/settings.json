@@ -3,6 +3,36 @@
   "$id": "https://github.com/wavetermdev/waveterm/pkg/wconfig/settings-type",
   "$ref": "#/$defs/SettingsType",
   "$defs": {
+    "MCPServerConfig": {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
     "SettingsType": {
       "properties": {
         "app:*": {
@@ -73,6 +103,12 @@
         },
         "ai:timeoutms": {
           "type": "number"
+        },
+        "ai:mcpservers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/MCPServerConfig"
+          },
+          "type": "object"
         },
         "term:*": {
           "type": "boolean"

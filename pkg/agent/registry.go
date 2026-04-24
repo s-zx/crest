@@ -4,6 +4,7 @@
 package agent
 
 import (
+	"github.com/wavetermdev/waveterm/pkg/agent/mcp"
 	"github.com/wavetermdev/waveterm/pkg/agent/tools"
 	"github.com/wavetermdev/waveterm/pkg/aiusechat/uctypes"
 )
@@ -30,6 +31,9 @@ func ToolsForMode(sess *Session) []uctypes.ToolDefinition {
 		if td, ok := buildTool(name, sess); ok {
 			out = append(out, td)
 		}
+	}
+	if sess.Mode.AllowMutation {
+		out = append(out, mcp.GetManager().GetAllTools()...)
 	}
 	return out
 }

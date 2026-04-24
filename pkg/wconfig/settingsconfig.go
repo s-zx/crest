@@ -36,6 +36,19 @@ const AnySchema = `
 }
 `
 
+type MCPServerConfig struct {
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Type    string            `json:"type,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Enabled *bool             `json:"enabled,omitempty"`
+}
+
+func (c MCPServerConfig) IsEnabled() bool {
+	return c.Enabled == nil || *c.Enabled
+}
+
 type SettingsType struct {
 	AppClear                      bool   `json:"app:*,omitempty"`
 	AppGlobalHotkey               string `json:"app:globalhotkey,omitempty"`
@@ -57,8 +70,9 @@ type SettingsType struct {
 	AiApiToken           string  `json:"ai:apitoken,omitempty"`
 	AiApiTokenSecretName string  `json:"ai:apitokensecretname,omitempty"`
 	AiModel              string  `json:"ai:model,omitempty"`
-	AiMaxTokens          float64 `json:"ai:maxtokens,omitempty"`
-	AiTimeoutMs          float64 `json:"ai:timeoutms,omitempty"`
+	AiMaxTokens          float64                      `json:"ai:maxtokens,omitempty"`
+	AiTimeoutMs          float64                      `json:"ai:timeoutms,omitempty"`
+	AiMcpServers         map[string]MCPServerConfig   `json:"ai:mcpservers,omitempty"`
 
 	TermClear               bool     `json:"term:*,omitempty"`
 	TermFontSize            float64  `json:"term:fontsize,omitempty"`

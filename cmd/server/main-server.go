@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	agentmcp "github.com/wavetermdev/waveterm/pkg/agent/mcp"
 	"github.com/wavetermdev/waveterm/pkg/authkey"
 	"github.com/wavetermdev/waveterm/pkg/blockcontroller"
 	"github.com/wavetermdev/waveterm/pkg/blocklogger"
@@ -79,6 +80,7 @@ func doShutdown(reason string) {
 		ctx, cancelFn := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancelFn()
 		go blockcontroller.StopAllBlockControllersForShutdown()
+		agentmcp.GetManager().Shutdown()
 		shutdownActivityUpdate()
 		sendTelemetryWrapper()
 		// TODO deal with flush in progress

@@ -1188,6 +1188,16 @@ declare global {
         blockid: string;
     };
 
+    // wconfig.MCPServerConfig
+    type MCPServerConfig = {
+        command?: string;
+        args?: string[];
+        env?: {[key: string]: string};
+        type?: string;
+        url?: string;
+        enabled?: boolean;
+    };
+
     // waveobj.MetaTSType
     type MetaType = {
         view?: string;
@@ -1484,6 +1494,7 @@ declare global {
         "ai:model"?: string;
         "ai:maxtokens"?: number;
         "ai:timeoutms"?: number;
+        "ai:mcpservers"?: {[key: string]: MCPServerConfig};
         "term:*"?: boolean;
         "term:fontsize"?: number;
         "term:fontfamily"?: string;

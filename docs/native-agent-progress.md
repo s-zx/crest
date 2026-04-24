@@ -40,10 +40,20 @@ Branch: `feat/native-agent`
 | Remaining artifacts | wsh view type, meta constants, telemetry fields | -41 |
 | **Total** | | **~5800 lines removed** |
 
-## Phase 2 — Browser + MCP ⬜
+## Phase 2 — MCP + Browser
 
+### MCP Client ✅
+- [x] `mcp-go` v0.49 dependency (stdio, SSE, streamable HTTP transports)
+- [x] `MCPServerConfig` type + `ai:mcpservers` settings key
+- [x] `pkg/agent/mcp/bridge.go` — MCP Tool → ToolDefinition conversion, `mcp__<server>__<tool>` namespacing
+- [x] `pkg/agent/mcp/manager.go` — singleton MCPManager, lazy init, config watcher, server lifecycle
+- [x] Wired into `ToolsForMode()` — MCP tools appended in mutation modes
+- [x] App shutdown integration — `MCPManager.Shutdown()` in server doShutdown
+- [x] System prompt updated with MCP tool guidance
+- [x] 7 unit tests for bridge (name parsing, tool conversion, error handling, text extraction)
+
+### Remaining
 - [ ] Browser tool implementation — CDP via `webContents.debugger`, fill `browser.*` stubs
-- [ ] External MCP client (stdio + SSE), dynamic tool registration
 - [ ] Skills integration: `.kilocode/skills/` as agent-invokable library
 - [ ] Eval harness: golden transcript replay + terminal-bench tasks
 
@@ -63,3 +73,4 @@ Branch: `feat/native-agent`
 - **Settings fallback** — agent tries waveai mode system first, then reads `settings.json` directly.
 - **API keys via secretstore** — stored in OS keychain, referenced by `ai:apitokensecretname`.
 - **ForgeCode attribution**: Apache 2.0 preserved in `NOTICE` files + `UPSTREAM.md`.
+- **MCP client** — `pkg/agent/mcp/` manages external MCP server connections. Config via `ai:mcpservers` in `settings.json`. Tools namespaced as `mcp__<server>__<tool>`, always require approval.
