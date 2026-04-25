@@ -1,14 +1,14 @@
 // Copyright 2026, s-zx
 // SPDX-License-Identifier: Apache-2.0
 
-import { UseChatSendMessageType, UseChatSetMessagesType } from "@/store/aitypes";
+import { UseChatSendMessageType, UseChatSetMessagesType, WaveUIMessage } from "@/store/aitypes";
 import { ContextMenuModel } from "@/app/store/contextmenu";
 import { getApi, getBlockMetaKeyAtom, getSettingsKeyAtom } from "@/app/store/global";
 import { globalStore } from "@/app/store/jotaiStore";
 import { waveEventSubscribeSingle } from "@/app/store/wps";
 import { RpcApi } from "@/app/store/wshclientapi";
 import { TabRpcClient } from "@/app/store/wshrpcutil";
-import { TermAgentOverlay } from "@/app/view/term/term-agent";
+import { TermAgentChatProvider, TermAgentMessagePartView } from "@/app/view/term/term-agent";
 import { buildTermSettingsMenuItems } from "@/app/view/term/term-settings-menu";
 import { computeTheme } from "@/app/view/term/termutil";
 import { WorkspaceLayoutModel } from "@/app/workspace/workspace-layout-model";
@@ -35,6 +35,11 @@ const MaxRenderedBytesPerBlock = 256 * 1024;
 // block output bounded by MaxRenderedBytesPerBlock.
 const MaxXtermRows = 2000;
 const MinXtermRows = 1;
+
+export type TimelineEntry =
+    | { type: "cmd"; block: CmdBlock; ts: number }
+    | { type: "agent-user"; id: string; text: string; mode: string; ts: number }
+    | { type: "agent-response"; message: WaveUIMessage; streaming: boolean; ts: number };
 
 export class TermBlocksViewModel implements ViewModel {
     viewType: string;
@@ -78,6 +83,8 @@ export class TermBlocksViewModel implements ViewModel {
     termAgentChatId = jotai.atom(crypto.randomUUID()) as jotai.PrimitiveAtom<string>;
     termAgentActiveMode = jotai.atom<"ask" | "plan" | "do">("do") as jotai.PrimitiveAtom<"ask" | "plan" | "do">;
     termAgentAgentMode!: jotai.Atom<"ask" | "plan" | "do">;
+    agentEntriesAtom = jotai.atom<TimelineEntry[]>([]) as jotai.PrimitiveAtom<TimelineEntry[]>;
+    timelineAtom!: jotai.Atom<TimelineEntry[]>;
     termAgentSendMessage: UseChatSendMessageType | null = null;
     termAgentSetMessages: UseChatSetMessagesType | null = null;
     termAgentStop: (() => void) | null = null;
@@ -144,6 +151,17 @@ export class TermBlocksViewModel implements ViewModel {
             if (input.startsWith("plan ") || input === "plan") return "plan";
             if (input === "") return get(this.termAgentActiveMode);
             return "do";
+        });
+        this.timelineAtom = jotai.atom((get): TimelineEntry[] => {
+            const blocks = get(this.blocksAtom);
+            const minSeq = get(this.minVisibleSeqAtom);
+            const hidden = get(this.hiddenOidsAtom);
+            const agentEntries = get(this.agentEntriesAtom);
+            const cmdEntries: TimelineEntry[] = blocks
+                .filter((b) => b.state !== "prompt" && b.seq > minSeq && !hidden.has(b.oid))
+                .map((b) => ({ type: "cmd" as const, block: b, ts: b.tspromptns / 1e6 }));
+            if (agentEntries.length === 0) return cmdEntries;
+            return [...cmdEntries, ...agentEntries].sort((a, b) => a.ts - b.ts);
         });
         // Initial RPC work is deferred because TabRpcClient is a live binding
         // that can still be undefined during module-evaluation / first-render
@@ -590,6 +608,27 @@ export class TermBlocksViewModel implements ViewModel {
         const ctx = this.termAgentPendingContext;
         this.termAgentPendingContext = {};
         return ctx;
+    }
+
+    syncAgentMessages(messages: WaveUIMessage[], status: string) {
+        const entries: TimelineEntry[] = [];
+        for (const msg of messages) {
+            const ts = (msg as any).createdAt?.getTime?.() ?? Date.now();
+            if (msg.role === "user") {
+                const text = (msg.parts ?? [])
+                    .filter((p) => p.type === "text")
+                    .map((p) => (p as any).text ?? "")
+                    .join("\n");
+                if (text) {
+                    entries.push({ type: "agent-user", id: msg.id, text, mode: globalStore.get(this.termAgentActiveMode), ts });
+                }
+            } else if (msg.role === "assistant") {
+                const isLast = msg === messages[messages.length - 1];
+                const streaming = (status === "streaming" || status === "submitted") && isLast;
+                entries.push({ type: "agent-response", message: msg, streaming, ts });
+            }
+        }
+        globalStore.set(this.agentEntriesAtom, entries);
     }
 
     termAgentLastPlanPath: string | null = null;
@@ -1289,9 +1328,20 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
         return "";
     }, [value, history]);
 
+    const agentMode = value.startsWith(":");
+
     const submit = () => {
         const line = value;
         if (line.length === 0) {
+            return;
+        }
+        if (line.startsWith(":")) {
+            const agentInput = line.slice(1);
+            globalStore.set(model.termAgentInput, agentInput);
+            setValue("");
+            historyIdxRef.current = -1;
+            draftRef.current = "";
+            model.submitTermAgentPrompt();
             return;
         }
         model.recordHistory(line);
@@ -1308,14 +1358,9 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
     };
 
     const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === "Escape" && globalStore.get(model.termAgentVisible)) {
+        if (e.key === "Escape" && agentMode) {
             e.preventDefault();
-            model.hideTermAgentOverlay();
-            return;
-        }
-        if (e.key === ":" && value === "" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-            e.preventDefault();
-            model.openTermAgentComposer();
+            setValue("");
             return;
         }
         if (e.ctrlKey && e.key.toLowerCase() === "c" && !e.metaKey && !e.shiftKey && !e.altKey) {
@@ -1373,8 +1418,17 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
 
     const tokens = React.useMemo(() => tokenizeShell(value), [value]);
 
+    const agentModeLabel = agentMode
+        ? value.startsWith(":ask ") ? "ask" : value.startsWith(":plan ") ? "plan" : "do"
+        : null;
+
     return (
         <div className="termblocks-input-row">
+            {agentMode && (
+                <span className="mr-1.5 shrink-0 rounded-full border border-[var(--color-accent)]/40 px-1.5 py-0.5 text-[10px] text-[var(--color-accent)]">
+                    {agentModeLabel}
+                </span>
+            )}
             <div className="termblocks-input-wrap">
                 <div className="termblocks-input-highlight" aria-hidden>
                     {tokens.map((t, idx) => (
@@ -1386,11 +1440,12 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
                 </div>
                 <input
                     ref={inputRef}
-                    className="termblocks-input"
+                    className={cn("termblocks-input", agentMode && "text-[var(--color-accent)]")}
                     type="text"
                     value={value}
                     spellCheck={false}
                     autoComplete="off"
+                    placeholder={agentMode ? "ask / plan / do ..." : undefined}
                     onChange={(e) => {
                         setValue(e.target.value);
                         historyIdxRef.current = -1;
@@ -1402,6 +1457,50 @@ const TermBlocksInput: React.FC<{ model: TermBlocksViewModel }> = ({ model }) =>
     );
 };
 TermBlocksInput.displayName = "TermBlocksInput";
+
+const TermAgentErrorBar: React.FC<{ model: TermBlocksViewModel }> = ({ model }) => {
+    const error = useAtomValue(model.termAgentError);
+    if (!error) return null;
+    const isInfo = error.startsWith("Model switched to:");
+    return (
+        <div className={cn("px-3 py-1 text-xs", isInfo ? "text-zinc-400" : "text-red-300")}>
+            {error}
+        </div>
+    );
+};
+
+const InlineAgentUserMsg = React.memo(({ text, mode }: { text: string; mode: string }) => {
+    return (
+        <div className="mx-3 my-2 flex justify-end">
+            <div className="max-w-[min(100%,44rem)] rounded-lg bg-zinc-700/70 px-3 py-2 text-sm text-white">
+                <div className="mb-1 flex items-center gap-2 text-[11px] text-zinc-400">
+                    <span className="rounded-full border border-zinc-600 px-1.5 py-0.5">{mode}</span>
+                </div>
+                <div className="whitespace-pre-wrap break-words">{text}</div>
+            </div>
+        </div>
+    );
+});
+InlineAgentUserMsg.displayName = "InlineAgentUserMsg";
+
+const InlineAgentResponse = React.memo(({ message, streaming }: { message: WaveUIMessage; streaming: boolean }) => {
+    const visibleParts = (message.parts ?? []).filter(
+        (part) => part.type === "text" || part.type === "reasoning" || part.type === "data-tooluse" || part.type === "data-toolprogress"
+    );
+    if (visibleParts.length === 0 && streaming) {
+        return (
+            <div className="mx-3 my-2 rounded-lg px-3 py-2 text-sm text-zinc-400">Thinking...</div>
+        );
+    }
+    return (
+        <div className="mx-3 my-2 space-y-2 rounded-lg border border-zinc-800/50 bg-zinc-900/30 px-3 py-2">
+            {visibleParts.map((part, idx) => (
+                <TermAgentMessagePartView key={`${part.type}:${idx}`} part={part} isStreaming={streaming} />
+            ))}
+        </div>
+    );
+});
+InlineAgentResponse.displayName = "InlineAgentResponse";
 
 export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> = ({ model }) => {
     const blocks = useAtomValue(model.blocksAtom);
@@ -1450,6 +1549,7 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
         () => blocks.filter((b) => b.state !== "prompt" && b.seq > minVisibleSeq && !hiddenOids.has(b.oid)),
         [blocks, minVisibleSeq, hiddenOids]
     );
+    const timeline = useAtomValue(model.timelineAtom);
     const lastOid = visibleBlocks.length > 0 ? visibleBlocks[visibleBlocks.length - 1].oid : "";
     const lastOutputLen = lastOid && outputs[lastOid] != null ? outputs[lastOid].length : 0;
     const inAltScreen = altOID !== "";
@@ -1476,7 +1576,7 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
             cancelAnimationFrame(raf2);
             clearTimeout(late);
         };
-    }, [lastOid, lastOutputLen, visibleBlocks.length, inAltScreen]);
+    }, [lastOid, lastOutputLen, visibleBlocks.length, inAltScreen, timeline.length]);
 
     // Alt-screen mode: a TUI (less/vim/top/…) took over the PTY, so we show
     // the running block's buffer in a single full-viewport xterm with stdin
@@ -1522,7 +1622,7 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
                 {!error && loading && visibleBlocks.length === 0 && (
                     <div className="termblocks-empty">Loading…</div>
                 )}
-                {visibleBlocks.length > 0 && (
+                {timeline.length > 0 && (
                     <div
                         className="termblocks-container"
                         onClick={(e) => {
@@ -1531,28 +1631,52 @@ export const TermBlocksView: React.FC<ViewComponentProps<TermBlocksViewModel>> =
                             }
                         }}
                     >
-                        {visibleBlocks.map((cb) => (
-                            <TermBlockRow
-                                key={cb.oid}
-                                block={cb}
-                                output={outputs[cb.oid]}
-                                model={model}
-                                fallbackCwd={blockMetaCwd}
-                                home={home}
-                                gitInfo={gitInfo}
-                                selected={cb.oid === selectedOid}
-                                theme={termTheme}
-                                fontSize={fontSize}
-                            />
-                        ))}
+                        {timeline.map((entry) => {
+                            if (entry.type === "cmd") {
+                                return (
+                                    <TermBlockRow
+                                        key={entry.block.oid}
+                                        block={entry.block}
+                                        output={outputs[entry.block.oid]}
+                                        model={model}
+                                        fallbackCwd={blockMetaCwd}
+                                        home={home}
+                                        gitInfo={gitInfo}
+                                        selected={entry.block.oid === selectedOid}
+                                        theme={termTheme}
+                                        fontSize={fontSize}
+                                    />
+                                );
+                            }
+                            if (entry.type === "agent-user") {
+                                return (
+                                    <InlineAgentUserMsg
+                                        key={entry.id}
+                                        text={entry.text}
+                                        mode={entry.mode}
+                                    />
+                                );
+                            }
+                            if (entry.type === "agent-response") {
+                                return (
+                                    <InlineAgentResponse
+                                        key={entry.message.id}
+                                        message={entry.message}
+                                        streaming={entry.streaming}
+                                    />
+                                );
+                            }
+                            return null;
+                        })}
                     </div>
                 )}
             </div>
             <div className="termblocks-input-card">
                 <TermBlocksStatusBar cwd={blockMetaCwd} home={home} gitInfo={gitInfo} blockId={model.blockId} />
+                <TermAgentErrorBar model={model} />
                 {runningBlock == null && <TermBlocksInput model={model} />}
             </div>
-            <TermAgentOverlay model={model} />
+            <TermAgentChatProvider model={model} />
         </div>
     );
 };

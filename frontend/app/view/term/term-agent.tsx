@@ -246,7 +246,7 @@ const TermAgentToolProgress = memo(({ part }: { part: WaveUIMessagePart }) => {
 
 TermAgentToolProgress.displayName = "TermAgentToolProgress";
 
-const TermAgentMessagePartView = memo(({ part, isStreaming }: { part: WaveUIMessagePart; isStreaming: boolean }) => {
+export const TermAgentMessagePartView = memo(({ part, isStreaming }: { part: WaveUIMessagePart; isStreaming: boolean }) => {
     if (part.type === "text") {
         return (
             <WaveStreamdown
@@ -320,15 +320,7 @@ const TermAgentMessage = memo(({ message, isStreaming }: { message: WaveUIMessag
 
 TermAgentMessage.displayName = "TermAgentMessage";
 
-export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
-    const visible = jotai.useAtomValue(model.termAgentVisible);
-    const composerOpen = jotai.useAtomValue(model.termAgentComposerOpen);
-    const inputValue = jotai.useAtomValue(model.termAgentInput);
-    const errorText = jotai.useAtomValue(model.termAgentError);
-    const agentMode = jotai.useAtomValue(model.termAgentAgentMode);
-    const scrollRef = useRef<HTMLDivElement>(null);
-    const composerInputRef = useRef<HTMLInputElement>(null);
-
+export const TermAgentChatProvider = memo(({ model }: { model: TermAgentModel }) => {
     const transport = useMemo(
         () =>
             new DefaultChatTransport({
@@ -361,6 +353,26 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
     });
 
     model.registerTermAgentChat(sendMessage, setMessages, status, stop);
+
+    useEffect(() => {
+        if ("syncAgentMessages" in model) {
+            (model as any).syncAgentMessages(messages, status);
+        }
+    }, [messages, status, model]);
+
+    return null;
+});
+
+TermAgentChatProvider.displayName = "TermAgentChatProvider";
+
+export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
+    const visible = jotai.useAtomValue(model.termAgentVisible);
+    const composerOpen = jotai.useAtomValue(model.termAgentComposerOpen);
+    const inputValue = jotai.useAtomValue(model.termAgentInput);
+    const errorText = jotai.useAtomValue(model.termAgentError);
+    const agentMode = jotai.useAtomValue(model.termAgentAgentMode);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const composerInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (!visible) {
