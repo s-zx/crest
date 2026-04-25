@@ -124,8 +124,8 @@ Three tiers. Tier 1 is "blocks calling this production." Tier 2 is "production-g
 Goal: capabilities that separate a good agent from a great one.
 
 13. **Sub-agent delegation** — `spawn_agent` tool with isolated context and explicit return protocol.
-14. **Background task execution** — non-blocking long commands (`dev-server start`), agent polls status, can `kill`.
-15. **Web search tool** — provider-backed or via external API; result summarization.
+14. ~~**Background task execution**~~ ✅ — `shell_exec` `background: true` returns immediately with block_id.
+15. ~~**Web search / fetch tool**~~ ✅ — `web_fetch` fetches URLs, strips HTML, returns text. Available in all modes.
 16. **Tool sandboxing** — opt-in container/VM for `:do` tasks; per-task filesystem isolation.
 17. **Conversation rewind / fork** — step index → new branch; UI for browsing history tree.
 18. **Full Harbor nightly run** — all tasks, scored, trended; regression alerts.
