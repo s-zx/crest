@@ -490,6 +490,11 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 			log.Printf("usage: input=%d output=%d websearch=%d\n", usage.InputTokens, usage.OutputTokens, usage.NativeWebSearchCount)
 			metrics.Usage.InputTokens += usage.InputTokens
 			metrics.Usage.OutputTokens += usage.OutputTokens
+			_ = sseHandler.AiMsgData("data-usage", "usage", map[string]int{
+				"inputtokens":  metrics.Usage.InputTokens,
+				"outputtokens": metrics.Usage.OutputTokens,
+				"steps":        metrics.RequestCount,
+			})
 			metrics.Usage.NativeWebSearchCount += usage.NativeWebSearchCount
 			if usage.Model != "" && metrics.Usage.Model != usage.Model {
 				metrics.Usage.Model = "mixed"

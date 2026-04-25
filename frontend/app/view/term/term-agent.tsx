@@ -45,6 +45,27 @@ type TermAgentOverlayProps = {
     model: TermAgentModel;
 };
 
+const TermAgentTokenCounter = memo(({ messages }: { messages: WaveUIMessage[] }) => {
+    let inputTokens = 0;
+    let outputTokens = 0;
+    for (const msg of messages) {
+        for (const part of msg.parts ?? []) {
+            if (part.type === "data-usage" && part.data) {
+                inputTokens = part.data.inputtokens ?? 0;
+                outputTokens = part.data.outputtokens ?? 0;
+            }
+        }
+    }
+    if (inputTokens === 0 && outputTokens === 0) {
+        return null;
+    }
+    const total = inputTokens + outputTokens;
+    const formatted = total >= 1000 ? `${(total / 1000).toFixed(1)}k` : String(total);
+    return <span className="text-zinc-500">{formatted} tokens</span>;
+});
+
+TermAgentTokenCounter.displayName = "TermAgentTokenCounter";
+
 const TermAgentApprovalButtons = memo(({ toolCallId }: { toolCallId: string }) => {
     const [approvalOverride, setApprovalOverride] = useState<string | null>(null);
 
@@ -279,6 +300,7 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
                         {status === "streaming" || status === "submitted" ? (
                             <span className="text-[var(--color-accent)]">Running</span>
                         ) : null}
+                        <TermAgentTokenCounter messages={messages} />
                     </div>
                     <div className="flex items-center gap-2">
                         {messages.length > 0 && (
