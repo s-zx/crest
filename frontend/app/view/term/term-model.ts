@@ -625,11 +625,40 @@ export class TermViewModel implements ViewModel {
         globalStore.set(this.termAgentVisible, false);
     }
 
+    termAgentLastPlanPath: string | null = null;
+    termAgentPendingPlanPath: string | null = null;
+
     clearTermAgentSession() {
         this.termAgentStop?.();
         globalStore.set(this.termAgentChatId, crypto.randomUUID());
         globalStore.set(this.termAgentError, null);
         this.termAgentSetMessages?.([]);
+        this.termAgentLastPlanPath = null;
+    }
+
+    getAndClearTermAgentPlanPath(): string {
+        const path = this.termAgentPendingPlanPath;
+        this.termAgentPendingPlanPath = null;
+        return path ?? "";
+    }
+
+    executePlan() {
+        if (!this.termAgentLastPlanPath || !this.termAgentSendMessage) {
+            return;
+        }
+        const planPath = this.termAgentLastPlanPath;
+        this.clearTermAgentSession();
+        this.termAgentPendingMode = "do";
+        this.termAgentPendingPlanPath = planPath;
+        this.termAgentRealMessage = {
+            messageid: crypto.randomUUID(),
+            parts: [{ type: "text", text: "Execute the plan" }],
+        };
+        this.termAgentPendingContext = this.buildTermAgentContext();
+        globalStore.set(this.termAgentVisible, true);
+        globalStore.set(this.termAgentError, null);
+        this.closeTermAgentComposer();
+        this.termAgentSendMessage({ parts: [{ type: "text", text: "Execute the plan" }] });
     }
 
     canOpenTermAgent(): boolean {

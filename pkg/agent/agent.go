@@ -25,9 +25,10 @@ const DefaultContextBudget = 100000
 
 // AgentOpts bundles everything RunAgent needs for a single turn.
 type AgentOpts struct {
-	Session *Session
-	UserMsg *uctypes.AIMessage
-	AIOpts  uctypes.AIOptsType
+	Session     *Session
+	UserMsg     *uctypes.AIMessage
+	AIOpts      uctypes.AIOptsType
+	PlanContext string
 }
 
 // RunAgent drives one agent turn. It assembles a WaveChatOpts with the
@@ -41,6 +42,9 @@ func RunAgent(ctx context.Context, sseHandler *sse.SSEHandlerCh, clientID string
 	}
 	if skills := DiscoverSkills(opts.Session.Cwd); len(skills) > 0 {
 		systemPrompt = append(systemPrompt, BuildSkillsContext(skills))
+	}
+	if opts.PlanContext != "" {
+		systemPrompt = append(systemPrompt, "## Active Plan\nExecute the following plan step by step:\n\n"+opts.PlanContext)
 	}
 
 	chatOpts := uctypes.WaveChatOpts{

@@ -590,12 +590,40 @@ export class TermBlocksViewModel implements ViewModel {
         return ctx;
     }
 
+    termAgentLastPlanPath: string | null = null;
+    termAgentPendingPlanPath: string | null = null;
+
     clearTermAgentSession() {
         if (this.termAgentSetMessages) {
             this.termAgentSetMessages([]);
         }
         globalStore.set(this.termAgentChatId, crypto.randomUUID());
         globalStore.set(this.termAgentError, null);
+        this.termAgentLastPlanPath = null;
+    }
+
+    getAndClearTermAgentPlanPath(): string {
+        const path = this.termAgentPendingPlanPath;
+        this.termAgentPendingPlanPath = null;
+        return path ?? "";
+    }
+
+    executePlan() {
+        if (!this.termAgentLastPlanPath || !this.termAgentSendMessage) {
+            return;
+        }
+        const planPath = this.termAgentLastPlanPath;
+        this.clearTermAgentSession();
+        this.termAgentPendingMode = "do";
+        this.termAgentPendingPlanPath = planPath;
+        this.termAgentRealMessage = {
+            messageid: crypto.randomUUID(),
+            parts: [{ type: "text", text: "Execute the plan" }],
+        };
+        this.termAgentPendingContext = this.buildTermAgentContext();
+        globalStore.set(this.termAgentError, null);
+        this.closeTermAgentComposer();
+        this.termAgentSendMessage({ parts: [{ type: "text", text: "Execute the plan" }] });
     }
 }
 

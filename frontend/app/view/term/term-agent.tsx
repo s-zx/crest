@@ -28,6 +28,9 @@ export type TermAgentModel = {
     getTermAgentModelOverride(): string;
     getAndClearTermAgentPendingMode(): string;
     getAndClearTermAgentPendingContext(): any;
+    getAndClearTermAgentPlanPath(): string;
+    termAgentLastPlanPath: string | null;
+    executePlan(): void;
     registerTermAgentChat(
         sendMessage: any,
         setMessages: any,
@@ -269,6 +272,7 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
                             chatid: globalStore.get(model.termAgentChatId),
                             aimode: model.getTermAgentMode(),
                             modeloverride: model.getTermAgentModelOverride(),
+                            planpath: model.getAndClearTermAgentPlanPath(),
                             tabid: model.tabModel.tabId,
                             blockid: model.blockId,
                             mode: model.getAndClearTermAgentPendingMode(),
@@ -301,6 +305,16 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
         scroller.scrollTop = scroller.scrollHeight;
     }, [messages, status, visible]);
 
+    useEffect(() => {
+        for (const msg of messages) {
+            for (const part of msg.parts ?? []) {
+                if (part.type === "data-tooluse" && part.data?.toolname === "write_plan" && part.data?.status === "completed" && part.data?.inputfilename) {
+                    model.termAgentLastPlanPath = part.data.inputfilename;
+                }
+            }
+        }
+    }, [messages, model]);
+
     const shouldRender = visible && (composerOpen || messages.length > 0 || status === "streaming" || status === "submitted" || errorText);
     if (!shouldRender) {
         return null;
@@ -321,9 +335,17 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
                         <TermAgentTokenCounter messages={messages} />
                     </div>
                     <div className="flex items-center gap-2">
+                        {model.termAgentLastPlanPath && status !== "streaming" && status !== "submitted" && (
+                            <button
+                                className="rounded border border-emerald-600/60 bg-emerald-500/10 px-2 py-1 text-emerald-200 transition-colors hover:bg-emerald-500/20 cursor-pointer"
+                                onClick={() => model.executePlan()}
+                            >
+                                Execute Plan
+                            </button>
+                        )}
                         {messages.length > 0 && (
                             <button
-                                className="rounded border border-zinc-700 px-2 py-1 text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white"
+                                className="rounded border border-zinc-700 px-2 py-1 text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white cursor-pointer"
                                 onClick={() => model.clearTermAgentSession()}
                             >
                                 New

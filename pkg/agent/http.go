@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-
+	"os"
 	"strings"
 
 	"github.com/google/uuid"
@@ -32,6 +32,7 @@ type PostAgentMessageRequest struct {
 	Mode          string            `json:"mode"`
 	AIMode        string            `json:"aimode"`
 	ModelOverride string            `json:"modeloverride,omitempty"`
+	PlanPath      string            `json:"planpath,omitempty"`
 	Msg           uctypes.AIMessage `json:"msg"`
 	Context       AgentContext      `json:"context,omitempty"`
 }
@@ -155,13 +156,24 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 		RecentCmds:  req.Context.RecentCmds,
 	}
 
+	var planContext string
+	if req.PlanPath != "" {
+		planBytes, readErr := os.ReadFile(req.PlanPath)
+		if readErr != nil {
+			log.Printf("agent: failed to read plan file %s: %v\n", req.PlanPath, readErr)
+		} else {
+			planContext = string(planBytes)
+		}
+	}
+
 	sseHandler := sse.MakeSSEHandlerCh(w, r.Context())
 	defer sseHandler.Close()
 
 	err = RunAgent(r.Context(), sseHandler, wstore.GetClientId(), AgentOpts{
-		Session: sess,
-		UserMsg: &req.Msg,
-		AIOpts:  *aiOpts,
+		Session:     sess,
+		UserMsg:     &req.Msg,
+		AIOpts:      *aiOpts,
+		PlanContext: planContext,
 	})
 	if err != nil {
 		log.Printf("agent: RunAgent error: %v\n", err)
