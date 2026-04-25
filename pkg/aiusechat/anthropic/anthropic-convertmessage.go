@@ -869,35 +869,44 @@ func GetFunctionCallInputByToolCallId(aiChat uctypes.AIChat, toolCallId string) 
 }
 
 func UpdateToolUseData(chatId string, toolCallId string, toolUseData uctypes.UIMessageDataToolUse) error {
-	chat := chatstore.DefaultChatStore.Get(chatId)
-	if chat == nil {
-		return fmt.Errorf("chat not found: %s", chatId)
-	}
-	for _, genMsg := range chat.NativeMessages {
-		chatMsg, ok := genMsg.(*anthropicChatMessage)
+	messageId, found := chatstore.DefaultChatStore.FindMessageIdByPredicate(chatId, func(m uctypes.GenAIMessage) bool {
+		chatMsg, ok := m.(*anthropicChatMessage)
 		if !ok {
-			continue
+			return false
 		}
-		for i, block := range chatMsg.Content {
-			if block.Type != "tool_use" || block.ID != toolCallId {
-				continue
+		for _, block := range chatMsg.Content {
+			if block.Type == "tool_use" && block.ID == toolCallId {
+				return true
 			}
-			updatedMsg := &anthropicChatMessage{
-				MessageId: chatMsg.MessageId,
-				Usage:     chatMsg.Usage,
-				Role:      chatMsg.Role,
-				Content:   slices.Clone(chatMsg.Content),
-			}
-			updatedMsg.Content[i].ToolUseData = &toolUseData
-			aiOpts := &uctypes.AIOptsType{
-				APIType:    chat.APIType,
-				Model:      chat.Model,
-				APIVersion: chat.APIVersion,
-			}
-			return chatstore.DefaultChatStore.PostMessage(chatId, aiOpts, updatedMsg)
 		}
+		return false
+	})
+	if !found {
+		return fmt.Errorf("tool call with ID %s not found in chat %s", toolCallId, chatId)
 	}
-	return fmt.Errorf("tool call with ID %s not found in chat %s", toolCallId, chatId)
+	updated := chatstore.DefaultChatStore.UpdateMessage(chatId, messageId, func(m uctypes.GenAIMessage) uctypes.GenAIMessage {
+		chatMsg, ok := m.(*anthropicChatMessage)
+		if !ok {
+			return nil
+		}
+		newContent := slices.Clone(chatMsg.Content)
+		for i, block := range newContent {
+			if block.Type == "tool_use" && block.ID == toolCallId {
+				newContent[i].ToolUseData = &toolUseData
+				return &anthropicChatMessage{
+					MessageId: chatMsg.MessageId,
+					Usage:     chatMsg.Usage,
+					Role:      chatMsg.Role,
+					Content:   newContent,
+				}
+			}
+		}
+		return nil
+	})
+	if !updated {
+		return fmt.Errorf("tool call with ID %s vanished during update in chat %s", toolCallId, chatId)
+	}
+	return nil
 }
 
 func RemoveToolUseCall(chatId string, toolCallId string) error {

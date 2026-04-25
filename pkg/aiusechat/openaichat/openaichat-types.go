@@ -232,6 +232,13 @@ func (m *StoredChatMessage) GetRole() string {
 	return m.Message.Role
 }
 
+func (m *StoredChatMessage) DependsOnPrev() bool {
+	if m == nil {
+		return false
+	}
+	return m.Message.Role == "tool"
+}
+
 func (m *StoredChatMessage) GetUsage() *uctypes.AIUsage {
 	if m.Usage == nil {
 		return nil

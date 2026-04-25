@@ -67,6 +67,51 @@ func (cs *ChatStore) CountUserMessages(chatId string) int {
 	return count
 }
 
+// UpdateMessage atomically applies fn to the message with the given messageId
+// while holding the chat lock. fn is called with the live pointer; if it
+// returns a non-nil replacement, the slot is replaced. Fixes a TOCTOU race
+// where concurrent UpdateToolUseData calls (e.g. parallel tool fan-out) would
+// each Get the chat, modify a clone, and PostMessage — last-writer-wins
+// silently dropped earlier updates. Returns false if the message wasn't found.
+func (cs *ChatStore) UpdateMessage(chatId string, messageId string, fn func(uctypes.GenAIMessage) uctypes.GenAIMessage) bool {
+	cs.lock.Lock()
+	defer cs.lock.Unlock()
+
+	chat := cs.chats[chatId]
+	if chat == nil {
+		return false
+	}
+	for i, msg := range chat.NativeMessages {
+		if msg.GetMessageId() != messageId {
+			continue
+		}
+		if replacement := fn(msg); replacement != nil {
+			chat.NativeMessages[i] = replacement
+		}
+		return true
+	}
+	return false
+}
+
+// FindMessageIdByPredicate returns the messageId of the first message satisfying pred,
+// scanning under the chat lock. Used by backends to bridge "find message by tool call id"
+// over to UpdateMessage without exposing internals.
+func (cs *ChatStore) FindMessageIdByPredicate(chatId string, pred func(uctypes.GenAIMessage) bool) (string, bool) {
+	cs.lock.Lock()
+	defer cs.lock.Unlock()
+
+	chat := cs.chats[chatId]
+	if chat == nil {
+		return "", false
+	}
+	for _, msg := range chat.NativeMessages {
+		if pred(msg) {
+			return msg.GetMessageId(), true
+		}
+	}
+	return "", false
+}
+
 func (cs *ChatStore) PostMessage(chatId string, aiOpts *uctypes.AIOptsType, message uctypes.GenAIMessage) error {
 	cs.lock.Lock()
 	defer cs.lock.Unlock()
@@ -123,10 +168,26 @@ func (cs *ChatStore) CompactMessages(chatId string, keepFirst, keepLast int) int
 	if total <= keepFirst+keepLast {
 		return 0
 	}
-	kept := make([]uctypes.GenAIMessage, 0, keepFirst+keepLast)
+	tailStart := total - keepLast
+	// Advance tailStart forward while the head of the tail is a tool-result
+	// continuation whose matching tool_use is in the dropped middle. Cutting
+	// there would orphan the tool_result and Anthropic 400s. We may end up
+	// keeping fewer than keepLast messages; that's intentional — correctness
+	// over window size.
+	for tailStart < total {
+		if dep, ok := chat.NativeMessages[tailStart].(uctypes.MessageDependsOnPrev); ok && dep.DependsOnPrev() {
+			tailStart++
+			continue
+		}
+		break
+	}
+	kept := make([]uctypes.GenAIMessage, 0, keepFirst+(total-tailStart))
 	kept = append(kept, chat.NativeMessages[:keepFirst]...)
-	kept = append(kept, chat.NativeMessages[total-keepLast:]...)
+	kept = append(kept, chat.NativeMessages[tailStart:]...)
 	removed := total - len(kept)
+	if removed <= 0 {
+		return 0
+	}
 	chat.NativeMessages = kept
 	return removed
 }

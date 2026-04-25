@@ -114,8 +114,8 @@ func getWaveAISettings(premium bool, builderMode bool, rtInfo waveobj.ObjRTInfo,
 		Verbosity:     verbosity,
 		AIMode:        aiMode,
 		Endpoint:      baseUrl,
-		ProxyURL:     config.ProxyURL,
-		Capabilities: config.Capabilities,
+		ProxyURL:      config.ProxyURL,
+		Capabilities:  config.Capabilities,
 	}
 	if apiToken != "" {
 		opts.APIToken = apiToken
@@ -386,6 +386,46 @@ func processAllToolCalls(backend UseChatBackend, stopReason *uctypes.WaveStopRea
 			wg.Add(1)
 			go func(idx int, toolCall uctypes.WaveToolCall) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("panic in parallel tool goroutine for %s: %v\n", toolCall.Name, r)
+						outcomes[idx] = uctypes.ToolCallOutcome{
+							Result: uctypes.AIToolResult{
+								ToolName:  toolCall.Name,
+								ToolUseID: toolCall.ID,
+								ErrorText: fmt.Sprintf("panic in parallel tool execution: %v", r),
+							},
+							IsError: true,
+							Audit: uctypes.ToolAuditEvent{
+								Timestamp:  time.Now().UnixMilli(),
+								ChatId:     chatOpts.ChatId,
+								ToolName:   toolCall.Name,
+								ToolCallId: toolCall.ID,
+								Outcome:    "error",
+								ErrorText:  fmt.Sprintf("panic: %v", r),
+							},
+						}
+					}
+				}()
+				if ctxErr := sseHandler.Err(); ctxErr != nil {
+					outcomes[idx] = uctypes.ToolCallOutcome{
+						Result: uctypes.AIToolResult{
+							ToolName:  toolCall.Name,
+							ToolUseID: toolCall.ID,
+							ErrorText: fmt.Sprintf("canceled before tool execution: %v", ctxErr),
+						},
+						IsError: true,
+						Audit: uctypes.ToolAuditEvent{
+							Timestamp:  time.Now().UnixMilli(),
+							ChatId:     chatOpts.ChatId,
+							ToolName:   toolCall.Name,
+							ToolCallId: toolCall.ID,
+							Outcome:    "canceled",
+							ErrorText:  ctxErr.Error(),
+						},
+					}
+					return
+				}
 				outcomes[idx] = processToolCall(backend, toolCall, chatOpts, sseHandler)
 			}(i, tc)
 		}

@@ -453,31 +453,33 @@ func GetFunctionCallInputByToolCallId(aiChat uctypes.AIChat, toolCallId string) 
 
 // UpdateToolUseData updates the ToolUseData for a specific tool call in the chat history
 func UpdateToolUseData(chatId string, callId string, newToolUseData uctypes.UIMessageDataToolUse) error {
-	chat := chatstore.DefaultChatStore.Get(chatId)
-	if chat == nil {
-		return fmt.Errorf("chat not found: %s", chatId)
-	}
-
-	for _, genMsg := range chat.NativeMessages {
-		chatMsg, ok := genMsg.(*StoredChatMessage)
+	messageId, found := chatstore.DefaultChatStore.FindMessageIdByPredicate(chatId, func(m uctypes.GenAIMessage) bool {
+		chatMsg, ok := m.(*StoredChatMessage)
 		if !ok {
-			continue
+			return false
+		}
+		return chatMsg.Message.FindToolCallIndex(callId) != -1
+	})
+	if !found {
+		return fmt.Errorf("tool call with callId %s not found in chat %s", callId, chatId)
+	}
+	updated := chatstore.DefaultChatStore.UpdateMessage(chatId, messageId, func(m uctypes.GenAIMessage) uctypes.GenAIMessage {
+		chatMsg, ok := m.(*StoredChatMessage)
+		if !ok {
+			return nil
 		}
 		idx := chatMsg.Message.FindToolCallIndex(callId)
 		if idx == -1 {
-			continue
+			return nil
 		}
 		updatedMsg := chatMsg.Copy()
 		updatedMsg.Message.ToolCalls[idx].ToolUseData = &newToolUseData
-		aiOpts := &uctypes.AIOptsType{
-			APIType:    chat.APIType,
-			Model:      chat.Model,
-			APIVersion: chat.APIVersion,
-		}
-		return chatstore.DefaultChatStore.PostMessage(chatId, aiOpts, updatedMsg)
+		return updatedMsg
+	})
+	if !updated {
+		return fmt.Errorf("tool call with callId %s vanished during update in chat %s", callId, chatId)
 	}
-
-	return fmt.Errorf("tool call with callId %s not found in chat %s", callId, chatId)
+	return nil
 }
 
 func RemoveToolUseCall(chatId string, callId string) error {

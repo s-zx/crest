@@ -11,13 +11,15 @@ import (
 )
 
 type testMsg struct {
-	id   string
-	role string
+	id        string
+	role      string
+	dependsOn bool
 }
 
-func (m *testMsg) GetMessageId() string          { return m.id }
-func (m *testMsg) GetRole() string               { return m.role }
-func (m *testMsg) GetUsage() *uctypes.AIUsage    { return nil }
+func (m *testMsg) GetMessageId() string       { return m.id }
+func (m *testMsg) GetRole() string            { return m.role }
+func (m *testMsg) GetUsage() *uctypes.AIUsage { return nil }
+func (m *testMsg) DependsOnPrev() bool        { return m.dependsOn }
 
 func makeTestStore(chatId string, n int) *ChatStore {
 	cs := &ChatStore{chats: make(map[string]*uctypes.AIChat)}
@@ -96,5 +98,25 @@ func TestCompactMessages_KeepFirstOneLastTen(t *testing.T) {
 	}
 	if chat.NativeMessages[1].GetMessageId() != "msg-40" {
 		t.Fatalf("second msg = %s, want msg-40", chat.NativeMessages[1].GetMessageId())
+	}
+}
+
+func TestCompactMessages_SkipsOrphanedToolResults(t *testing.T) {
+	cs := &ChatStore{chats: make(map[string]*uctypes.AIChat)}
+	chat := &uctypes.AIChat{ChatId: "c4", APIType: "mock", Model: "mock"}
+	for i := 0; i < 20; i++ {
+		chat.NativeMessages = append(chat.NativeMessages, &testMsg{id: fmt.Sprintf("msg-%d", i), role: "user"})
+	}
+	chat.NativeMessages[10] = &testMsg{id: "msg-10", role: "user", dependsOn: true}
+	chat.NativeMessages[11] = &testMsg{id: "msg-11", role: "user", dependsOn: true}
+	cs.chats["c4"] = chat
+
+	removed := cs.CompactMessages("c4", 1, 10)
+	got := cs.Get("c4")
+	if got.NativeMessages[1].GetMessageId() != "msg-12" {
+		t.Fatalf("tail head = %s, want msg-12 (msg-10 and msg-11 are dependent)", got.NativeMessages[1].GetMessageId())
+	}
+	if removed != 11 {
+		t.Fatalf("removed = %d, want 11", removed)
 	}
 }

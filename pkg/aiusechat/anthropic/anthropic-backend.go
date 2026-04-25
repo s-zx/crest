@@ -52,6 +52,18 @@ func (m *anthropicChatMessage) GetRole() string {
 	return m.Role
 }
 
+func (m *anthropicChatMessage) DependsOnPrev() bool {
+	if m == nil {
+		return false
+	}
+	for _, block := range m.Content {
+		if block.Type == "tool_result" {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *anthropicChatMessage) GetUsage() *uctypes.AIUsage {
 	if m.Usage == nil {
 		return nil
@@ -197,9 +209,9 @@ type anthropicCacheControl struct {
 }
 
 type anthropicCachedToolDef struct {
-	Name         string                `json:"name"`
-	Description  string                `json:"description"`
-	InputSchema  map[string]any        `json:"input_schema"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description"`
+	InputSchema  map[string]any         `json:"input_schema"`
 	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 }
 
@@ -308,16 +320,16 @@ type partialJSON struct {
 }
 
 type streamingState struct {
-	blockMap        map[int]*blockState
-	toolCalls       []uctypes.WaveToolCall
-	stopFromDelta   string
-	msgID           string
-	model           string
-	stepStarted     bool
-	rtnMessage      *anthropicChatMessage
-	usage           *anthropicUsageType
-	chatOpts        uctypes.WaveChatOpts
-	webSearchCount  int
+	blockMap       map[int]*blockState
+	toolCalls      []uctypes.WaveToolCall
+	stopFromDelta  string
+	msgID          string
+	model          string
+	stepStarted    bool
+	rtnMessage     *anthropicChatMessage
+	usage          *anthropicUsageType
+	chatOpts       uctypes.WaveChatOpts
+	webSearchCount int
 }
 
 func (p *partialJSON) Write(s string) {

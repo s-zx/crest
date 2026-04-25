@@ -378,10 +378,13 @@ timelineAtom = atom((get) => {
 
 **Data flow:**
 1. Agent calls `spawn_task {task: "...", mode: "ask"}`
-2. Tool generates new chatId, builds `WaveChatOpts` with the parent's AI config but isolated chatstore entry
-3. Creates `httptest.NewRecorder()` SSE handler (headless — sub-agent doesn't stream to frontend)
-4. Calls `aiusechat.RunAIChat(ctx, sseHandler, backend, chatOpts)` directly
+2. Tool generates new chatId, builds `WaveChatOpts` with the parent's AI config but isolated chatstore entry; subtask context is derived from parent so cancellation propagates
+3. Uses `MakeDiscardSSEHandlerCh` (not `httptest.NewRecorder`) so SSE writes drain rather than fill a buffer and error out after ~10 messages
+4. Calls `aiusechat.RunAIChat(ctx, sseHandler, backend, chatOpts)` directly; auto-approves all non-dangerous tools (the sub-agent has no UI)
 5. Returns metrics summary (steps, tool calls, tokens) — not the actual response text (would require extracting from chatstore, complex)
+6. `defer chatstore.DefaultChatStore.Delete(subChatId)` cleans up the isolated chat entry
+
+**Approval handling:** Sub-agent auto-approves every tool call by default. *However*, `shell_exec.ToolVerifyInput` overrides `Approval = NeedsApproval` for any command flagged by `IsDangerousCommand` (rm -rf, fork bomb, eval $(curl), etc.) — and the sub-agent has no UI to grant approval. **Dangerous commands inside a sub-agent therefore block until the 120s spawn-task timeout.** This is intentional: a sub-agent silently running `rm -rf /` would be far worse than blocking. Callers should structure sub-tasks to avoid dangerous shell commands; if you genuinely need them, run the sub-task as a foreground turn instead.
 
 **Trade-offs:** Returning summary instead of text means the parent agent gets a thumbs-up but not the answer. For "summarize this file" this is wrong. For "go run a long-running test" this is fine. We chose the simpler implementation; future work could extract the last assistant text from the sub-chatstore.
 

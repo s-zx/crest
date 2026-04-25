@@ -41,6 +41,9 @@ type AgentOpts struct {
 // context, then hands control to aiusechat.WaveAIPostMessageWrap which owns
 // streaming, step loop, and metrics.
 func RunAgent(ctx context.Context, sseHandler *sse.SSEHandlerCh, clientID string, opts AgentOpts) error {
+	if opts.Session != nil {
+		opts.Session.Ctx = ctx
+	}
 	systemPrompt := SystemPromptForMode(opts.Session.Mode)
 	if termCtx := BuildTerminalContext(opts.Session); termCtx != "" {
 		systemPrompt = append(systemPrompt, termCtx)

@@ -68,6 +68,7 @@ func buildTool(name string, sess *Session) (uctypes.ToolDefinition, bool) {
 	case "spawn_task":
 		cfg := tools.SpawnTaskConfig{
 			ParentOpts: sess.AIOpts,
+			ParentCtx:  sess.Ctx,
 			Cwd:        sess.Cwd,
 			PromptForMode: func(modeName string) []string {
 				m, ok := LookupMode(modeName)

@@ -114,7 +114,7 @@ type ToolDefinition struct {
 }
 
 type ToolCallOutcome struct {
-	Result     AIToolResult
+	Result      AIToolResult
 	Audit       ToolAuditEvent
 	IsError     bool
 	ToolLogName string
@@ -228,15 +228,15 @@ type UIMessageDataToolProgress struct {
 type StopReasonKind string
 
 const (
-	StopKindDone             StopReasonKind = "done"
-	StopKindToolUse          StopReasonKind = "tool_use"
-	StopKindMaxTokens        StopReasonKind = "max_tokens"
-	StopKindContent          StopReasonKind = "content_filter"
-	StopKindCanceled         StopReasonKind = "canceled"
-	StopKindError            StopReasonKind = "error"
-	StopKindPauseTurn        StopReasonKind = "pause_turn"
-	StopKindRateLimit StopReasonKind = "rate_limit"
-	StopKindStepBudget       StopReasonKind = "step_budget"
+	StopKindDone       StopReasonKind = "done"
+	StopKindToolUse    StopReasonKind = "tool_use"
+	StopKindMaxTokens  StopReasonKind = "max_tokens"
+	StopKindContent    StopReasonKind = "content_filter"
+	StopKindCanceled   StopReasonKind = "canceled"
+	StopKindError      StopReasonKind = "error"
+	StopKindPauseTurn  StopReasonKind = "pause_turn"
+	StopKindRateLimit  StopReasonKind = "rate_limit"
+	StopKindStepBudget StopReasonKind = "step_budget"
 )
 
 type WaveToolCall struct {
@@ -274,7 +274,7 @@ type AIOptsType struct {
 	ThinkingLevel string   `json:"thinkinglevel,omitempty"` // ThinkingLevelLow, ThinkingLevelMedium, or ThinkingLevelHigh
 	Verbosity     string   `json:"verbosity,omitempty"`     // Text verbosity level (OpenAI Responses API only, ignored by other backends)
 	AIMode        string   `json:"aimode,omitempty"`
-	Capabilities []string `json:"capabilities,omitempty"`
+	Capabilities  []string `json:"capabilities,omitempty"`
 }
 
 func (opts AIOptsType) HasCapability(cap string) bool {
@@ -310,25 +310,25 @@ type ToolAuditEvent struct {
 }
 
 type AIMetrics struct {
-	ChatId            string         `json:"chatid"`
-	StepNum           int            `json:"stepnum"`
-	Usage             AIUsage        `json:"usage"`
-	RequestCount      int            `json:"requestcount"`
-	ToolUseCount      int            `json:"toolusecount"`
-	ToolUseErrorCount int            `json:"tooluseerrorcount"`
-	ToolDetail map[string]int `json:"tooldetail,omitempty"`
-	HadError   bool           `json:"haderror"`
-	ImageCount        int            `json:"imagecount"`
-	PDFCount          int            `json:"pdfcount"`
-	TextDocCount      int            `json:"textdoccount"`
-	TextLen           int            `json:"textlen"`
-	FirstByteLatency  int            `json:"firstbytelatency"` // ms
-	RequestDuration   int            `json:"requestduration"`  // ms
-	WidgetAccess      bool           `json:"widgetaccess"`
-	ThinkingLevel     string         `json:"thinkinglevel,omitempty"`
-	AIMode            string         `json:"aimode,omitempty"`
-	AIProvider        string         `json:"aiprovider,omitempty"`
-	IsLocal           bool           `json:"islocal,omitempty"`
+	ChatId            string           `json:"chatid"`
+	StepNum           int              `json:"stepnum"`
+	Usage             AIUsage          `json:"usage"`
+	RequestCount      int              `json:"requestcount"`
+	ToolUseCount      int              `json:"toolusecount"`
+	ToolUseErrorCount int              `json:"tooluseerrorcount"`
+	ToolDetail        map[string]int   `json:"tooldetail,omitempty"`
+	HadError          bool             `json:"haderror"`
+	ImageCount        int              `json:"imagecount"`
+	PDFCount          int              `json:"pdfcount"`
+	TextDocCount      int              `json:"textdoccount"`
+	TextLen           int              `json:"textlen"`
+	FirstByteLatency  int              `json:"firstbytelatency"` // ms
+	RequestDuration   int              `json:"requestduration"`  // ms
+	WidgetAccess      bool             `json:"widgetaccess"`
+	ThinkingLevel     string           `json:"thinkinglevel,omitempty"`
+	AIMode            string           `json:"aimode,omitempty"`
+	AIProvider        string           `json:"aiprovider,omitempty"`
+	IsLocal           bool             `json:"islocal,omitempty"`
 	AuditLog          []ToolAuditEvent `json:"auditlog,omitempty"`
 }
 
@@ -345,6 +345,16 @@ type GenAIMessage interface {
 	GetMessageId() string
 	GetUsage() *AIUsage
 	GetRole() string
+}
+
+// MessageDependsOnPrev is implemented by messages that cannot stand alone
+// because their content references the immediately preceding message — e.g.
+// a user-role message containing tool_result blocks whose tool_use IDs come
+// from the prior assistant message, or an OpenAI Responses function_call_output
+// that follows its function_call. Compaction uses this to avoid cutting in
+// the middle of a tool-use/tool-result pair (which would 400 from the API).
+type MessageDependsOnPrev interface {
+	DependsOnPrev() bool
 }
 
 const (

@@ -89,6 +89,37 @@ func MakeSSEHandlerCh(w http.ResponseWriter, ctx context.Context) *SSEHandlerCh 
 	}
 }
 
+// MakeDiscardSSEHandlerCh creates a headless SSE handler that drains all messages
+// without writing anywhere. Used for sub-agents that should not stream to a frontend
+// but still need a working sseHandler so RunAIChat's queue calls don't back up and
+// onClose hooks (approval cancel) still fire when the parent context is cancelled.
+func MakeDiscardSSEHandlerCh(ctx context.Context) *SSEHandlerCh {
+	h := &SSEHandlerCh{
+		ctx:         ctx,
+		writeCh:     make(chan SSEMessage, 10),
+		initialized: true,
+	}
+	h.wg.Add(1)
+	go h.discardLoop()
+	return h
+}
+
+func (h *SSEHandlerCh) discardLoop() {
+	defer h.wg.Done()
+	defer h.runOnCloseHandlers()
+	for {
+		select {
+		case _, ok := <-h.writeCh:
+			if !ok {
+				return
+			}
+		case <-h.ctx.Done():
+			h.setError(h.ctx.Err())
+			return
+		}
+	}
+}
+
 func (h *SSEHandlerCh) Context() context.Context {
 	return h.ctx
 }

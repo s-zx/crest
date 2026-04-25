@@ -6,8 +6,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"time"
 
@@ -30,8 +28,9 @@ type spawnTaskInput struct {
 }
 
 type SpawnTaskConfig struct {
-	ParentOpts   uctypes.AIOptsType
-	Cwd          string
+	ParentOpts    uctypes.AIOptsType
+	ParentCtx     context.Context
+	Cwd           string
 	PromptForMode func(string) []string
 	ToolsForMode  func(string) []uctypes.ToolDefinition
 }
@@ -103,10 +102,16 @@ func parseSpawnTaskInput(input any) (*spawnTaskInput, error) {
 }
 
 func runSpawnTask(params *spawnTaskInput, cfg SpawnTaskConfig) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), SpawnTaskTimeout)
+	parentCtx := cfg.ParentCtx
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parentCtx, SpawnTaskTimeout)
 	defer cancel()
 
-	chatID := uuid.New().String()
+	chatID := "subtask:" + uuid.New().String()
+	defer chatstore.DefaultChatStore.Delete(chatID)
+
 	msg := &uctypes.AIMessage{
 		MessageId: uuid.New().String(),
 		Parts:     []uctypes.AIMessagePart{{Type: uctypes.AIMessagePartTypeText, Text: params.Task}},
@@ -126,9 +131,15 @@ func runSpawnTask(params *spawnTaskInput, cfg SpawnTaskConfig) (string, error) {
 	if cfg.ToolsForMode != nil {
 		taskTools = cfg.ToolsForMode(params.Mode)
 	}
+	// The sub-agent has no SSE channel to the user, so it cannot prompt for
+	// approval. Force every tool to auto-approve inside the child; the parent
+	// already approved the spawn_task call itself, which is the visible gate.
+	for i := range taskTools {
+		taskTools[i].ToolApproval = autoApprovedFn
+	}
 
 	chatOpts := uctypes.WaveChatOpts{
-		ChatId:       "subtask:" + chatID,
+		ChatId:       chatID,
 		Config:       cfg.ParentOpts,
 		Tools:        taskTools,
 		SystemPrompt: systemPrompt,
@@ -145,9 +156,7 @@ func runSpawnTask(params *spawnTaskInput, cfg SpawnTaskConfig) (string, error) {
 		return "", fmt.Errorf("post message: %w", err)
 	}
 
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/subtask", nil)
-	sseHandler := sse.MakeSSEHandlerCh(w, r.Context())
+	sseHandler := sse.MakeDiscardSSEHandlerCh(ctx)
 	defer sseHandler.Close()
 
 	metrics, err := aiusechat.RunAIChat(ctx, sseHandler, backend, chatOpts)
@@ -159,4 +168,8 @@ func runSpawnTask(params *spawnTaskInput, cfg SpawnTaskConfig) (string, error) {
 		metrics.RequestCount, metrics.ToolUseCount,
 		metrics.Usage.InputTokens, metrics.Usage.OutputTokens,
 		metrics.HadError), nil
+}
+
+func autoApprovedFn(any) string {
+	return uctypes.ApprovalAutoApproved
 }
