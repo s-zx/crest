@@ -126,6 +126,24 @@ const TermAgentToolUse = memo(({ part, isStreaming }: { part: WaveUIMessagePart;
                     <div className="text-xs text-zinc-400">{toolData?.toolname ?? "tool"}</div>
                 </div>
             </div>
+            {toolData?.diff && (
+                <details open className="mt-2">
+                    <summary className="cursor-pointer select-none text-xs text-zinc-400">Diff preview</summary>
+                    <pre className="mt-1 max-h-[200px] overflow-y-auto rounded border border-zinc-800 bg-black/30 p-2 text-[11px] leading-relaxed">
+                        {toolData.diff.split("\n").map((line: string, i: number) => {
+                            let cls = "text-zinc-400";
+                            if (line.startsWith("+")) cls = "text-emerald-400";
+                            else if (line.startsWith("-")) cls = "text-red-400";
+                            else if (line.startsWith("@@")) cls = "text-blue-400";
+                            return (
+                                <div key={i} className={cls}>
+                                    {line}
+                                </div>
+                            );
+                        })}
+                    </pre>
+                </details>
+            )}
             {errorText && <div className="mt-2 text-xs text-red-300">{errorText}</div>}
             {approval === "needs-approval" && isStreaming && toolData?.toolcallid && (
                 <TermAgentApprovalButtons toolCallId={toolData.toolcallid} />

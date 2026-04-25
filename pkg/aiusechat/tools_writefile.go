@@ -11,6 +11,7 @@ import (
 	"github.com/s-zx/crest/pkg/aiusechat/uctypes"
 	"github.com/s-zx/crest/pkg/filebackup"
 	"github.com/s-zx/crest/pkg/util/fileutil"
+	"github.com/s-zx/crest/pkg/util/textdiff"
 	"github.com/s-zx/crest/pkg/util/utilfn"
 	"github.com/s-zx/crest/pkg/wavebase"
 )
@@ -127,6 +128,15 @@ func verifyWriteTextFileInput(input any, toolUseData *uctypes.UIMessageDataToolU
 	}
 
 	toolUseData.InputFileName = params.Filename
+
+	existing, err := os.ReadFile(expandedPath)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to read existing file for diff: %w", err)
+	}
+	if diffStr := textdiff.UnifiedDiff(existing, contentsBytes, params.Filename); diffStr != "" {
+		toolUseData.Diff = diffStr
+	}
+
 	return nil
 }
 
@@ -265,6 +275,14 @@ func verifyEditTextFileInput(input any, toolUseData *uctypes.UIMessageDataToolUs
 	}
 
 	toolUseData.InputFileName = params.Filename
+
+	original, modified, dryRunErr := EditTextFileDryRun(input, "")
+	if dryRunErr == nil {
+		if diffStr := textdiff.UnifiedDiff(original, modified, params.Filename); diffStr != "" {
+			toolUseData.Diff = diffStr
+		}
+	}
+
 	return nil
 }
 

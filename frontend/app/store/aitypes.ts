@@ -21,6 +21,7 @@ type WaveUIDataTypes = {
         blockid?: string;
         writebackupfilename?: string;
         inputfilename?: string;
+        diff?: string;
     };
     toolprogress: {
         toolcallid: string;
