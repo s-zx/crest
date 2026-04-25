@@ -150,6 +150,7 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 		TabID:       req.TabId,
 		BlockID:     req.BlockId,
 		Mode:        mode,
+		AIOpts:      *aiOpts,
 		Cwd:         req.Context.Cwd,
 		Connection:  req.Context.Connection,
 		LastCommand: req.Context.LastCommand,

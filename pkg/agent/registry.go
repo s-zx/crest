@@ -65,8 +65,39 @@ func buildTool(name string, sess *Session) (uctypes.ToolDefinition, bool) {
 		return tools.BrowserScreenshot(sess.TabID, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	case "web_fetch":
 		return tools.WebFetch(approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
+	case "spawn_task":
+		cfg := tools.SpawnTaskConfig{
+			ParentOpts: sess.AIOpts,
+			Cwd:        sess.Cwd,
+			PromptForMode: func(modeName string) []string {
+				m, ok := LookupMode(modeName)
+				if !ok {
+					return nil
+				}
+				return SystemPromptForMode(m)
+			},
+			ToolsForMode: func(modeName string) []uctypes.ToolDefinition { return toolsForModeByName(modeName, sess) },
+		}
+		return tools.SpawnTask(cfg, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	}
 	return uctypes.ToolDefinition{}, false
+}
+
+func toolsForModeByName(modeName string, sess *Session) []uctypes.ToolDefinition {
+	m, ok := LookupMode(modeName)
+	if !ok {
+		return nil
+	}
+	subSess := &Session{
+		ChatID:     sess.ChatID,
+		TabID:      sess.TabID,
+		BlockID:    sess.BlockID,
+		Mode:       m,
+		AIOpts:     sess.AIOpts,
+		Cwd:        sess.Cwd,
+		Connection: sess.Connection,
+	}
+	return ToolsForMode(subSess)
 }
 
 // approvalResolver returns a closure that consults the session's mode policy.

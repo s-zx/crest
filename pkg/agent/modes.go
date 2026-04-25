@@ -98,6 +98,7 @@ var modes = map[string]*Mode{
 			"browser.click",
 			"browser.screenshot",
 			"web_fetch",
+			"spawn_task",
 		},
 		AllowMutation: true,
 		Approval: ApprovalPolicy{
@@ -113,6 +114,7 @@ var modes = map[string]*Mode{
 				"shell_exec":       true,
 				"create_block":     true,
 				"web_fetch":        true,
+				"spawn_task":       true,
 				"browser.navigate": true,
 				"browser.click":    true,
 			},
