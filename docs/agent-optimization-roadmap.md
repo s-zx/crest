@@ -126,8 +126,8 @@ Goal: capabilities that separate a good agent from a great one.
 13. ~~**Sub-agent delegation**~~ ✅ — `spawn_task` tool with isolated chat context, 15-step budget, same model/tools.
 14. ~~**Background task execution**~~ ✅ — `shell_exec` `background: true` returns immediately with block_id.
 15. ~~**Web search / fetch tool**~~ ✅ — `web_fetch` fetches URLs, strips HTML, returns text. Available in all modes.
-16. **Tool sandboxing** — opt-in container/VM for `:do` tasks; per-task filesystem isolation.
-17. **Conversation rewind / fork** — step index → new branch; UI for browsing history tree.
+16. ~~**Tool sandboxing**~~ ✅ — Git worktree isolation via `:worktree` command (Claude Code model). Opt-in, persistent per session.
+17. ~~**Conversation rewind**~~ ✅ — `:undo` removes last turn from both frontend and backend chatstore.
 18. **Full Harbor nightly run** — all tasks, scored, trended; regression alerts.
 19. ~~**CI regression gate**~~ ✅ — GitHub Actions workflow for agent tests
 20. **Trajectory viewer** — replay a session step-by-step, show diffs, timing, token usage.
