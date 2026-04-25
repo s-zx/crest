@@ -34,6 +34,7 @@ type shellExecInput struct {
 	Cwd         string `json:"cwd,omitempty"`
 	TimeoutSec  int    `json:"timeout_sec,omitempty"`
 	CloseOnExit bool   `json:"close_on_exit,omitempty"`
+	Background  bool   `json:"background,omitempty"`
 }
 
 type shellExecOutput struct {
@@ -77,6 +78,11 @@ func ShellExec(tabID, defaultBlockID, defaultCwd, defaultConnection string, appr
 					"type":        "boolean",
 					"default":     false,
 					"description": "Close the block automatically when the command finishes.",
+				},
+				"background": map[string]any{
+					"type":        "boolean",
+					"default":     false,
+					"description": "Run in the background. Returns immediately with the block_id without waiting for completion. Use for long-running processes like dev servers, watchers, or builds you want to monitor separately.",
 				},
 			},
 			"required":             []string{"cmd"},
@@ -203,6 +209,13 @@ func runShellExec(ctx context.Context, params *shellExecInput, tabID, defaultBlo
 
 	if err := blockcontroller.ResyncController(ctx, tabID, blockID, nil, false); err != nil {
 		return nil, fmt.Errorf("start controller: %w", err)
+	}
+
+	if params.Background {
+		return &shellExecOutput{
+			BlockID:    blockID,
+			StdoutTail: "started in background",
+		}, nil
 	}
 
 	startTime := time.Now()
