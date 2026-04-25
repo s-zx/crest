@@ -123,7 +123,7 @@ Three tiers. Tier 1 is "blocks calling this production." Tier 2 is "production-g
 
 Goal: capabilities that separate a good agent from a great one.
 
-13. **Sub-agent delegation** — `spawn_agent` tool with isolated context and explicit return protocol.
+13. ~~**Sub-agent delegation**~~ ✅ — `spawn_task` tool with isolated chat context, 15-step budget, same model/tools.
 14. ~~**Background task execution**~~ ✅ — `shell_exec` `background: true` returns immediately with block_id.
 15. ~~**Web search / fetch tool**~~ ✅ — `web_fetch` fetches URLs, strips HTML, returns text. Available in all modes.
 16. **Tool sandboxing** — opt-in container/VM for `:do` tasks; per-task filesystem isolation.
