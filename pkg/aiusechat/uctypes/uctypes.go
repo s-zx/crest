@@ -536,6 +536,7 @@ type WaveChatOpts struct {
 	ContextBudget        int
 	MetricsCallback      func(*AIMetrics)
 	FileChangeCallback   func(path, backupPath string, isNew bool)
+	PendingTodosCheck    func() bool
 
 	// ephemeral to the step
 	TabState       string

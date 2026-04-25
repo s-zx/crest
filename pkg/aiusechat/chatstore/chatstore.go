@@ -6,6 +6,7 @@ package chatstore
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/s-zx/crest/pkg/aiusechat/uctypes"
@@ -157,23 +158,23 @@ func (cs *ChatStore) PostMessage(chatId string, aiOpts *uctypes.AIOptsType, mess
 }
 
 func (cs *ChatStore) CompactMessages(chatId string, keepFirst, keepLast int) int {
+	_, removed := cs.CompactMessagesWithSummary(chatId, keepFirst, keepLast)
+	return removed
+}
+
+func (cs *ChatStore) CompactMessagesWithSummary(chatId string, keepFirst, keepLast int) (string, int) {
 	cs.lock.Lock()
 	defer cs.lock.Unlock()
 
 	chat := cs.chats[chatId]
 	if chat == nil {
-		return 0
+		return "", 0
 	}
 	total := len(chat.NativeMessages)
 	if total <= keepFirst+keepLast {
-		return 0
+		return "", 0
 	}
 	tailStart := total - keepLast
-	// Advance tailStart forward while the head of the tail is a tool-result
-	// continuation whose matching tool_use is in the dropped middle. Cutting
-	// there would orphan the tool_result and Anthropic 400s. We may end up
-	// keeping fewer than keepLast messages; that's intentional — correctness
-	// over window size.
 	for tailStart < total {
 		if dep, ok := chat.NativeMessages[tailStart].(uctypes.MessageDependsOnPrev); ok && dep.DependsOnPrev() {
 			tailStart++
@@ -181,15 +182,40 @@ func (cs *ChatStore) CompactMessages(chatId string, keepFirst, keepLast int) int
 		}
 		break
 	}
+	droppedRange := chat.NativeMessages[keepFirst:tailStart]
+	summary := buildCompactionSummary(droppedRange)
 	kept := make([]uctypes.GenAIMessage, 0, keepFirst+(total-tailStart))
 	kept = append(kept, chat.NativeMessages[:keepFirst]...)
 	kept = append(kept, chat.NativeMessages[tailStart:]...)
 	removed := total - len(kept)
 	if removed <= 0 {
-		return 0
+		return "", 0
 	}
 	chat.NativeMessages = kept
-	return removed
+	return summary, removed
+}
+
+func buildCompactionSummary(dropped []uctypes.GenAIMessage) string {
+	if len(dropped) == 0 {
+		return ""
+	}
+	roleCounts := make(map[string]int)
+	for _, msg := range dropped {
+		roleCounts[msg.GetRole()]++
+	}
+	var parts []string
+	for _, role := range []string{"user", "assistant", "tool"} {
+		if c := roleCounts[role]; c > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", c, role))
+		}
+	}
+	for role, c := range roleCounts {
+		if role != "user" && role != "assistant" && role != "tool" {
+			parts = append(parts, fmt.Sprintf("%d %s", c, role))
+		}
+	}
+	return fmt.Sprintf("[Context compacted: %d messages summarized (%s). Earlier conversation history has been condensed to fit within the context window. Key decisions and file changes from those messages may need to be re-verified.]",
+		len(dropped), strings.Join(parts, ", "))
 }
 
 func (cs *ChatStore) PopLastMessages(chatId string, count int) int {

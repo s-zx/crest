@@ -254,6 +254,7 @@ func processToolCallInternal(backend UseChatBackend, toolCall uctypes.WaveToolCa
 	if result.ErrorText != "" {
 		toolCall.ToolUseData.Status = uctypes.ToolUseStatusError
 		toolCall.ToolUseData.ErrorMessage = result.ErrorText
+		result.ErrorText = result.ErrorText + "\n\n[Reflection required] Before retrying, identify exactly what went wrong and why. Try a different approach or different arguments rather than repeating the same call."
 	} else {
 		toolCall.ToolUseData.Status = uctypes.ToolUseStatusCompleted
 	}
@@ -473,6 +474,17 @@ func processAllToolCalls(backend UseChatBackend, stopReason *uctypes.WaveStopRea
 	}
 }
 
+func detectDoomLoop(sigs []string, threshold int) bool {
+	counts := make(map[string]int)
+	for _, sig := range sigs {
+		counts[sig]++
+		if counts[sig] >= threshold {
+			return true
+		}
+	}
+	return false
+}
+
 func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseChatBackend, chatOpts uctypes.WaveChatOpts) (*uctypes.AIMetrics, error) {
 	if !activeChats.SetUnless(chatOpts.ChatId, true) {
 		return nil, fmt.Errorf("chat %s is already running", chatOpts.ChatId)
@@ -501,8 +513,10 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 	}
 	firstStep := true
 	stepBudgetWarned := false
+	doomLoopWarned := false
 	var lastInputTokens int
 	var cont *uctypes.WaveContinueResponse
+	var recentToolSigs []string
 	for {
 		if chatOpts.TabStateGenerator != nil {
 			tabState, tabTools, tabId, tabErr := chatOpts.TabStateGenerator()
@@ -575,15 +589,53 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 		}
 		if chatOpts.ContextBudget > 0 && lastInputTokens > chatOpts.ContextBudget*4/5 {
 			const compactKeepLast = 10
-			removed := chatstore.DefaultChatStore.CompactMessages(chatOpts.ChatId, 1, compactKeepLast)
+			summary, removed := chatstore.DefaultChatStore.CompactMessagesWithSummary(chatOpts.ChatId, 1, compactKeepLast)
 			if removed > 0 {
 				log.Printf("context compaction: removed %d messages (input_tokens=%d, budget=%d)\n", removed, lastInputTokens, chatOpts.ContextBudget)
+				if summary != "" {
+					summaryMsg := &uctypes.AIMessage{
+						MessageId: uuid.New().String(),
+						Parts:     []uctypes.AIMessagePart{{Type: uctypes.AIMessagePartTypeText, Text: summary}},
+					}
+					nativeMsg, err := backend.ConvertAIMessageToNativeChatMessage(*summaryMsg)
+					if err == nil {
+						_ = chatstore.DefaultChatStore.PostMessage(chatOpts.ChatId, &chatOpts.Config, nativeMsg)
+					}
+				}
 			}
 		}
 		firstStep = false
 		if stopReason != nil && stopReason.Kind == uctypes.StopKindToolUse {
 			metrics.ToolUseCount += len(stopReason.ToolCalls)
 			processAllToolCalls(backend, stopReason, chatOpts, sseHandler, metrics)
+			for _, tc := range stopReason.ToolCalls {
+				inputJSON, _ := json.Marshal(tc.Input)
+				sig := tc.Name + ":" + utilfn.TruncateString(string(inputJSON), 200)
+				recentToolSigs = append(recentToolSigs, sig)
+			}
+			const doomLoopWindow = 6
+			const doomLoopThreshold = 3
+			if len(recentToolSigs) > doomLoopWindow {
+				recentToolSigs = recentToolSigs[len(recentToolSigs)-doomLoopWindow:]
+			}
+			if !doomLoopWarned && detectDoomLoop(recentToolSigs, doomLoopThreshold) {
+				chatOpts.SystemPrompt = append(chatOpts.SystemPrompt,
+					"WARNING: You appear to be stuck in a repetitive loop making similar tool calls. "+
+						"Stop and reconsider your approach. Try a fundamentally different strategy, "+
+						"different tool, or different arguments. If you are stuck, explain what you are "+
+						"trying to accomplish.")
+				doomLoopWarned = true
+				log.Printf("doom-loop detected in chat %s after %d tool calls\n", chatOpts.ChatId, len(recentToolSigs))
+			}
+			cont = &uctypes.WaveContinueResponse{
+				Model:            chatOpts.Config.Model,
+				ContinueFromKind: uctypes.StopKindToolUse,
+			}
+			continue
+		}
+		if chatOpts.PendingTodosCheck != nil && chatOpts.PendingTodosCheck() {
+			chatOpts.SystemPrompt = append(chatOpts.SystemPrompt,
+				"You have pending todo items that are not yet completed. Do not stop — continue working on the remaining items. Use `todo_read` to review your progress.")
 			cont = &uctypes.WaveContinueResponse{
 				Model:            chatOpts.Config.Model,
 				ContinueFromKind: uctypes.StopKindToolUse,
