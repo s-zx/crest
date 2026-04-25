@@ -86,17 +86,17 @@ func TestResolveApproval_NilMode(t *testing.T) {
 
 func TestModeToolNames(t *testing.T) {
 	askMode, _ := LookupMode(ModeAsk)
-	if len(askMode.ToolNames) != 4 {
-		t.Fatalf("ask mode should have 4 tools, got %d", len(askMode.ToolNames))
+	if len(askMode.ToolNames) != 5 {
+		t.Fatalf("ask mode should have 5 tools, got %d", len(askMode.ToolNames))
 	}
 
 	planMode, _ := LookupMode(ModePlan)
-	if len(planMode.ToolNames) != 5 {
-		t.Fatalf("plan mode should have 5 tools, got %d", len(planMode.ToolNames))
+	if len(planMode.ToolNames) != 6 {
+		t.Fatalf("plan mode should have 6 tools, got %d", len(planMode.ToolNames))
 	}
 
 	doMode, _ := LookupMode(ModeDo)
-	if len(doMode.ToolNames) != 13 {
+	if len(doMode.ToolNames) != 14 {
 		t.Fatalf("do mode should have 13 tools, got %d", len(doMode.ToolNames))
 	}
 }

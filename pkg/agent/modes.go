@@ -47,6 +47,7 @@ var modes = map[string]*Mode{
 			"read_dir",
 			"get_scrollback",
 			"cmd_history",
+			"web_fetch",
 		},
 		AllowMutation: false,
 		Approval: ApprovalPolicy{
@@ -64,6 +65,7 @@ var modes = map[string]*Mode{
 			"get_scrollback",
 			"cmd_history",
 			"write_plan",
+			"web_fetch",
 		},
 		AllowMutation: false,
 		Approval: ApprovalPolicy{
@@ -95,6 +97,7 @@ var modes = map[string]*Mode{
 			"browser.read_text",
 			"browser.click",
 			"browser.screenshot",
+			"web_fetch",
 		},
 		AllowMutation: true,
 		Approval: ApprovalPolicy{
@@ -109,6 +112,7 @@ var modes = map[string]*Mode{
 				"edit_text_file":   true,
 				"shell_exec":       true,
 				"create_block":     true,
+				"web_fetch":        true,
 				"browser.navigate": true,
 				"browser.click":    true,
 			},

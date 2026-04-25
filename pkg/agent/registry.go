@@ -63,6 +63,8 @@ func buildTool(name string, sess *Session) (uctypes.ToolDefinition, bool) {
 		return tools.BrowserClick(sess.TabID, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	case "browser.screenshot":
 		return tools.BrowserScreenshot(sess.TabID, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
+	case "web_fetch":
+		return tools.WebFetch(approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	}
 	return uctypes.ToolDefinition{}, false
 }
