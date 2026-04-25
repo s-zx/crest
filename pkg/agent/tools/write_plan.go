@@ -85,8 +85,11 @@ func WritePlan(tabID, defaultTargetBlockID, defaultCwd, defaultConnection string
 			if err != nil {
 				return nil, err
 			}
-			if toolUseData != nil && out.BlockID != "" {
-				toolUseData.BlockId = out.BlockID
+			if toolUseData != nil {
+				if out.BlockID != "" {
+					toolUseData.BlockId = out.BlockID
+				}
+				toolUseData.InputFileName = out.Path
 			}
 			return out, nil
 		},

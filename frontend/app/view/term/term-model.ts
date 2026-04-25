@@ -556,10 +556,8 @@ export class TermViewModel implements ViewModel {
         this.termAgentStop = stop;
     }
 
-    getAndClearTermAgentMessage(): any | null {
-        const msg = this.termAgentRealMessage;
-        this.termAgentRealMessage = null;
-        return msg;
+    getAndClearTermAgentMessage(): any {
+        return this.termAgentRealMessage ?? { messageid: crypto.randomUUID(), parts: [{ type: "text", text: "continue" }] };
     }
 
     getAndClearTermAgentPendingMode(): string {
@@ -647,18 +645,18 @@ export class TermViewModel implements ViewModel {
             return;
         }
         const planPath = this.termAgentLastPlanPath;
-        this.clearTermAgentSession();
+        const msg = `Execute the plan at ${planPath}`;
         this.termAgentPendingMode = "do";
         this.termAgentPendingPlanPath = planPath;
         this.termAgentRealMessage = {
             messageid: crypto.randomUUID(),
-            parts: [{ type: "text", text: "Execute the plan" }],
+            parts: [{ type: "text", text: msg }],
         };
         this.termAgentPendingContext = this.buildTermAgentContext();
         globalStore.set(this.termAgentVisible, true);
         globalStore.set(this.termAgentError, null);
         this.closeTermAgentComposer();
-        this.termAgentSendMessage({ parts: [{ type: "text", text: "Execute the plan" }] });
+        this.termAgentSendMessage({ parts: [{ type: "text", text: msg }] });
     }
 
     canOpenTermAgent(): boolean {
@@ -710,7 +708,8 @@ export class TermViewModel implements ViewModel {
             const modelName = userInput.slice("model ".length).trim();
             if (modelName) {
                 this.termAgentModelOverride = modelName;
-                globalStore.set(this.termAgentError, null);
+                globalStore.set(this.termAgentChatId, crypto.randomUUID());
+                globalStore.set(this.termAgentError, `Model switched to: ${modelName}`);
                 this.closeTermAgentComposer();
                 globalStore.set(this.termAgentVisible, true);
             }

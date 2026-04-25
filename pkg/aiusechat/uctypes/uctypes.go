@@ -207,7 +207,8 @@ type UIMessageDataToolUse struct {
 	BlockId             string `json:"blockid,omitempty"`
 	WriteBackupFileName string `json:"writebackupfilename,omitempty"`
 	InputFileName       string `json:"inputfilename,omitempty"`
-	Diff                string `json:"diff,omitempty"`
+	OriginalContent     string `json:"originalcontent,omitempty"`
+	ModifiedContent     string `json:"modifiedcontent,omitempty"`
 }
 
 func (d *UIMessageDataToolUse) IsApproved() bool {

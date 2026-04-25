@@ -21,8 +21,10 @@ require (
 	github.com/junegunn/fzf v0.65.2
 	github.com/kevinburke/ssh_config v1.2.0
 	github.com/launchdarkly/eventsource v1.11.0
+	github.com/mark3labs/mcp-go v0.49.0
 	github.com/mattn/go-sqlite3 v1.14.40
 	github.com/mitchellh/mapstructure v1.5.0
+	github.com/s-zx/crest/tsunami v0.12.3
 	github.com/sawka/txwrap v0.2.0
 	github.com/shirou/gopsutil/v4 v4.26.3
 	github.com/skeema/knownhosts v1.3.1
@@ -30,7 +32,6 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/ubuntu/gowsl v0.0.0-20240906163211-049fd49bd93b
 	github.com/wavetermdev/htmltoken v0.2.0
-	github.com/s-zx/crest/tsunami v0.12.3
 	golang.org/x/crypto v0.50.0
 	golang.org/x/mod v0.34.0
 	golang.org/x/sync v0.20.0
@@ -60,7 +61,6 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/mark3labs/mcp-go v0.49.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect

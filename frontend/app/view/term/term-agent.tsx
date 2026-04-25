@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { WaveUIMessage, WaveUIMessagePart } from "@/store/aitypes";
+import * as Diff from "diff";
 import { WaveStreamdown } from "@/app/element/streamdown";
 import { globalStore } from "@/app/store/jotaiStore";
 import { RpcApi } from "@/app/store/wshclientapi";
@@ -69,6 +70,84 @@ const TermAgentTokenCounter = memo(({ messages }: { messages: WaveUIMessage[] })
 
 TermAgentTokenCounter.displayName = "TermAgentTokenCounter";
 
+const TermAgentInlineDiff = memo(
+    ({ original, modified, filename }: { original: string; modified: string; filename?: string }) => {
+        const isNewFile = original === "" || original == null;
+        const noChanges = original === modified;
+        const label = filename ? filename.replace(/^.*\//, "") : "Diff preview";
+
+        const hunks = useMemo(() => {
+            if (noChanges || isNewFile) return null;
+            const patch = Diff.structuredPatch("a", "b", original ?? "", modified ?? "", "", "", { context: 3 });
+            return patch.hunks;
+        }, [original, modified, noChanges, isNewFile]);
+
+        if (noChanges) {
+            return <div className="mt-2 rounded border border-zinc-800 px-3 py-1.5 text-xs text-zinc-500">No changes</div>;
+        }
+        if (isNewFile) {
+            return (
+                <details open className="mt-2">
+                    <summary className="cursor-pointer select-none text-xs text-zinc-400">
+                        {label} <span className="text-zinc-500">New file</span>
+                    </summary>
+                    <pre className="mt-1 max-h-[200px] overflow-y-auto rounded border border-zinc-800 bg-[#12261e] p-2 font-mono text-[11px] leading-relaxed text-emerald-300">
+                        {modified}
+                    </pre>
+                </details>
+            );
+        }
+
+        return (
+            <details open className="mt-2">
+                <summary className="cursor-pointer select-none text-xs text-zinc-400">{label}</summary>
+                <div className="mt-1 max-h-[240px] overflow-y-auto rounded border border-zinc-800 bg-[#0d1117] font-mono text-[11px] leading-[1.6]">
+                    {hunks?.map((hunk, hi) => {
+                        let newLineNo = hunk.newStart;
+                        let oldLineNo = hunk.oldStart;
+                        return (
+                            <div key={hi}>
+                                {hi > 0 && <div className="border-t border-zinc-800/50 py-0.5 text-center text-[10px] text-zinc-600">···</div>}
+                                {hunk.lines.map((line, li) => {
+                                    const prefix = line[0];
+                                    const text = line.slice(1);
+                                    let lineNo = "";
+                                    let bg = "";
+                                    let textColor = "text-zinc-400";
+                                    let lineNoColor = "text-zinc-600";
+                                    if (prefix === "+") {
+                                        lineNo = String(newLineNo++);
+                                        bg = "bg-[#12261e]";
+                                        textColor = "text-emerald-300";
+                                        lineNoColor = "text-emerald-700";
+                                    } else if (prefix === "-") {
+                                        oldLineNo++;
+                                        bg = "bg-[#2d1215]";
+                                        textColor = "text-red-300";
+                                        lineNoColor = "text-red-700";
+                                    } else {
+                                        lineNo = String(newLineNo++);
+                                        oldLineNo++;
+                                    }
+                                    return (
+                                        <div key={`${hi}-${li}`} className={`flex ${bg}`}>
+                                            <span className={`w-8 shrink-0 select-none pr-2 text-right ${lineNoColor}`}>{lineNo}</span>
+                                            <span className={`w-4 shrink-0 select-none text-center ${textColor}`}>{prefix}</span>
+                                            <span className={`flex-1 whitespace-pre-wrap break-all pr-2 ${textColor}`}>{text}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+                </div>
+            </details>
+        );
+    }
+);
+
+TermAgentInlineDiff.displayName = "TermAgentInlineDiff";
+
 const TermAgentApprovalButtons = memo(({ toolCallId }: { toolCallId: string }) => {
     const [approvalOverride, setApprovalOverride] = useState<string | null>(null);
 
@@ -129,23 +208,12 @@ const TermAgentToolUse = memo(({ part, isStreaming }: { part: WaveUIMessagePart;
                     <div className="text-xs text-zinc-400">{toolData?.toolname ?? "tool"}</div>
                 </div>
             </div>
-            {toolData?.diff && (
-                <details open className="mt-2">
-                    <summary className="cursor-pointer select-none text-xs text-zinc-400">Diff preview</summary>
-                    <pre className="mt-1 max-h-[200px] overflow-y-auto rounded border border-zinc-800 bg-black/30 p-2 text-[11px] leading-relaxed">
-                        {toolData.diff.split("\n").map((line: string, i: number) => {
-                            let cls = "text-zinc-400";
-                            if (line.startsWith("+")) cls = "text-emerald-400";
-                            else if (line.startsWith("-")) cls = "text-red-400";
-                            else if (line.startsWith("@@")) cls = "text-blue-400";
-                            return (
-                                <div key={i} className={cls}>
-                                    {line}
-                                </div>
-                            );
-                        })}
-                    </pre>
-                </details>
+            {toolData?.modifiedcontent != null && (
+                <TermAgentInlineDiff
+                    original={toolData?.originalcontent ?? ""}
+                    modified={toolData.modifiedcontent}
+                    filename={toolData?.inputfilename}
+                />
             )}
             {errorText && <div className="mt-2 text-xs text-red-300">{errorText}</div>}
             {approval === "needs-approval" && isStreaming && toolData?.toolcallid && (
@@ -308,8 +376,8 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
     useEffect(() => {
         for (const msg of messages) {
             for (const part of msg.parts ?? []) {
-                if (part.type === "data-tooluse" && part.data?.toolname === "write_plan" && part.data?.status === "completed" && part.data?.inputfilename) {
-                    model.termAgentLastPlanPath = part.data.inputfilename;
+                if (part.type === "data-tooluse" && part.data?.toolname === "write_plan" && part.data?.status === "completed") {
+                    model.termAgentLastPlanPath = part.data.inputfilename ?? "plan";
                 }
             }
         }

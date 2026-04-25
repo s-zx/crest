@@ -76,6 +76,7 @@ export class TermBlocksViewModel implements ViewModel {
     termAgentInput = jotai.atom("") as jotai.PrimitiveAtom<string>;
     termAgentError = jotai.atom(null) as jotai.PrimitiveAtom<string | null>;
     termAgentChatId = jotai.atom(crypto.randomUUID()) as jotai.PrimitiveAtom<string>;
+    termAgentActiveMode = jotai.atom<"ask" | "plan" | "do">("do") as jotai.PrimitiveAtom<"ask" | "plan" | "do">;
     termAgentAgentMode!: jotai.Atom<"ask" | "plan" | "do">;
     termAgentSendMessage: UseChatSendMessageType | null = null;
     termAgentSetMessages: UseChatSetMessagesType | null = null;
@@ -141,6 +142,7 @@ export class TermBlocksViewModel implements ViewModel {
             const input = get(this.termAgentInput);
             if (input.startsWith("ask ") || input === "ask") return "ask";
             if (input.startsWith("plan ") || input === "plan") return "plan";
+            if (input === "") return get(this.termAgentActiveMode);
             return "do";
         });
         // Initial RPC work is deferred because TabRpcClient is a live binding
@@ -533,7 +535,8 @@ export class TermBlocksViewModel implements ViewModel {
             const modelName = userInput.slice("model ".length).trim();
             if (modelName) {
                 this.termAgentModelOverride = modelName;
-                globalStore.set(this.termAgentError, null);
+                globalStore.set(this.termAgentChatId, crypto.randomUUID());
+                globalStore.set(this.termAgentError, `Model switched to: ${modelName}`);
                 this.closeTermAgentComposer();
             }
             return;
@@ -544,8 +547,9 @@ export class TermBlocksViewModel implements ViewModel {
             return;
         }
         globalStore.set(this.termAgentError, null);
-        this.termAgentRealMessage = { messageid: crypto.randomUUID(), role: "user", parts: [{ type: "text", text: stripped }] };
+        this.termAgentRealMessage = { messageid: crypto.randomUUID(), parts: [{ type: "text", text: stripped }] };
         this.termAgentPendingMode = mode;
+        globalStore.set(this.termAgentActiveMode, mode);
         this.termAgentPendingContext = this.buildTermAgentContext();
         globalStore.set(this.termAgentComposerOpen, false);
         globalStore.set(this.termAgentInput, "");
@@ -569,9 +573,7 @@ export class TermBlocksViewModel implements ViewModel {
     termAgentModelOverride: string | null = null;
 
     getAndClearTermAgentMessage(): any {
-        const msg = this.termAgentRealMessage;
-        this.termAgentRealMessage = null;
-        return msg;
+        return this.termAgentRealMessage ?? { messageid: crypto.randomUUID(), parts: [{ type: "text", text: "continue" }] };
     }
 
     getTermAgentModelOverride(): string {
@@ -612,18 +614,18 @@ export class TermBlocksViewModel implements ViewModel {
         if (!this.termAgentLastPlanPath || !this.termAgentSendMessage) {
             return;
         }
-        const planPath = this.termAgentLastPlanPath;
-        this.clearTermAgentSession();
         this.termAgentPendingMode = "do";
-        this.termAgentPendingPlanPath = planPath;
+        this.termAgentPendingPlanPath = this.termAgentLastPlanPath;
+        globalStore.set(this.termAgentActiveMode, "do");
         this.termAgentRealMessage = {
             messageid: crypto.randomUUID(),
-            parts: [{ type: "text", text: "Execute the plan" }],
+            parts: [{ type: "text", text: "go" }],
         };
         this.termAgentPendingContext = this.buildTermAgentContext();
         globalStore.set(this.termAgentError, null);
         this.closeTermAgentComposer();
-        this.termAgentSendMessage({ parts: [{ type: "text", text: "Execute the plan" }] });
+        this.termAgentLastPlanPath = null;
+        this.termAgentSendMessage({ parts: [{ type: "text", text: "go" }] });
     }
 }
 
