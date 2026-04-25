@@ -26,13 +26,14 @@ import (
 // has (cwd, connection, last command, recent commands). Mode prefix parsing
 // happens client-side — this handler just reads the final mode.
 type PostAgentMessageRequest struct {
-	ChatID  string            `json:"chatid"`
-	TabId   string            `json:"tabid"`
-	BlockId string            `json:"blockid"`
-	Mode    string            `json:"mode"`
-	AIMode  string            `json:"aimode"`
-	Msg     uctypes.AIMessage `json:"msg"`
-	Context AgentContext      `json:"context,omitempty"`
+	ChatID        string            `json:"chatid"`
+	TabId         string            `json:"tabid"`
+	BlockId       string            `json:"blockid"`
+	Mode          string            `json:"mode"`
+	AIMode        string            `json:"aimode"`
+	ModelOverride string            `json:"modeloverride,omitempty"`
+	Msg           uctypes.AIMessage `json:"msg"`
+	Context       AgentContext      `json:"context,omitempty"`
 }
 
 type AgentContext struct {
@@ -138,6 +139,9 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Sprintf("WaveAI configuration error: %v", err), http.StatusInternalServerError)
 		return
+	}
+	if req.ModelOverride != "" {
+		aiOpts.Model = req.ModelOverride
 	}
 
 	sess := &Session{

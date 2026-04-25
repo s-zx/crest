@@ -25,6 +25,7 @@ export type TermAgentModel = {
     termAgentAgentMode: jotai.Atom<"ask" | "plan" | "do">;
     getAndClearTermAgentMessage(): any;
     getTermAgentMode(): string;
+    getTermAgentModelOverride(): string;
     getAndClearTermAgentPendingMode(): string;
     getAndClearTermAgentPendingContext(): any;
     registerTermAgentChat(
@@ -228,6 +229,7 @@ export const TermAgentOverlay = memo(({ model }: TermAgentOverlayProps) => {
                             msg: model.getAndClearTermAgentMessage(),
                             chatid: globalStore.get(model.termAgentChatId),
                             aimode: model.getTermAgentMode(),
+                            modeloverride: model.getTermAgentModelOverride(),
                             tabid: model.tabModel.tabId,
                             blockid: model.blockId,
                             mode: model.getAndClearTermAgentPendingMode(),

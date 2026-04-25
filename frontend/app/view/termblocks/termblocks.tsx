@@ -529,6 +529,15 @@ export class TermBlocksViewModel implements ViewModel {
             this.closeTermAgentComposer();
             return;
         }
+        if (userInput.startsWith("model ")) {
+            const modelName = userInput.slice("model ".length).trim();
+            if (modelName) {
+                this.termAgentModelOverride = modelName;
+                globalStore.set(this.termAgentError, null);
+                this.closeTermAgentComposer();
+            }
+            return;
+        }
         const { mode, stripped } = this.parseTermAgentInput(userInput);
         if (stripped === "") {
             this.closeTermAgentComposer();
@@ -557,10 +566,16 @@ export class TermBlocksViewModel implements ViewModel {
         this.termAgentStop = stop;
     }
 
+    termAgentModelOverride: string | null = null;
+
     getAndClearTermAgentMessage(): any {
         const msg = this.termAgentRealMessage;
         this.termAgentRealMessage = null;
         return msg;
+    }
+
+    getTermAgentModelOverride(): string {
+        return this.termAgentModelOverride ?? "";
     }
 
     getAndClearTermAgentPendingMode(): string {

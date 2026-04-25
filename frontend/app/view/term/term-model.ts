@@ -574,6 +574,12 @@ export class TermViewModel implements ViewModel {
         return ctx;
     }
 
+    getTermAgentModelOverride(): string {
+        return this.termAgentModelOverride ?? "";
+    }
+
+    termAgentModelOverride: string | null = null;
+
     parseTermAgentInput(input: string): { mode: "ask" | "plan" | "do"; stripped: string } {
         if (input.startsWith("ask ")) return { mode: "ask", stripped: input.slice(4) };
         if (input.startsWith("plan ")) return { mode: "plan", stripped: input.slice(5) };
@@ -669,6 +675,16 @@ export class TermViewModel implements ViewModel {
             this.clearTermAgentSession();
             this.closeTermAgentComposer();
             globalStore.set(this.termAgentVisible, true);
+            return;
+        }
+        if (userInput.startsWith("model ")) {
+            const modelName = userInput.slice("model ".length).trim();
+            if (modelName) {
+                this.termAgentModelOverride = modelName;
+                globalStore.set(this.termAgentError, null);
+                this.closeTermAgentComposer();
+                globalStore.set(this.termAgentVisible, true);
+            }
             return;
         }
 
