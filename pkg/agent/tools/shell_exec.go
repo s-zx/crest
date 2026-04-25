@@ -6,6 +6,8 @@ package tools
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -38,16 +40,14 @@ type shellExecInput struct {
 }
 
 type shellExecOutput struct {
-	BlockID    string `json:"block_id"`
-	ExitCode   int    `json:"exit_code"`
-	DurationMs int64  `json:"duration_ms"`
-	StdoutTail string `json:"stdout_tail"`
-	Truncated  bool   `json:"truncated"`
-	TimedOut   bool   `json:"timed_out"`
-	// Background is true when the tool returned without waiting for the
-	// process to finish (background=true input). ExitCode and DurationMs
-	// are meaningless in that case — the LLM must check separately.
-	Background bool `json:"background,omitempty"`
+	BlockID      string `json:"block_id"`
+	ExitCode     int    `json:"exit_code"`
+	DurationMs   int64  `json:"duration_ms"`
+	StdoutTail   string `json:"stdout_tail"`
+	Truncated    bool   `json:"truncated"`
+	TimedOut     bool   `json:"timed_out"`
+	SpilloverLog string `json:"spillover_log,omitempty"`
+	Background   bool   `json:"background,omitempty"`
 }
 
 // ShellExec creates a visible cmd-block in the user's tab, runs the command,
@@ -58,7 +58,7 @@ func ShellExec(tabID, defaultBlockID, defaultCwd, defaultConnection string, appr
 	return uctypes.ToolDefinition{
 		Name:        "shell_exec",
 		DisplayName: "Shell Execute",
-		Description: "Run a shell command in a new visible terminal block. The command output is visible to the user in real-time. Returns exit code and a tail of stdout. Use for builds, tests, git operations, installs, and any shell task.",
+		Description: "Run a shell command in a new visible terminal block. The command output is visible to the user in real-time. Returns exit code and a tail of stdout. If output is truncated, the full output is saved to a spillover log file whose path is returned — use `read_text_file` on it to access the full output.",
 		ToolLogName: "agent:shell_exec",
 		InputSchema: map[string]any{
 			"type": "object",
@@ -272,13 +272,25 @@ func runShellExec(ctx context.Context, params *shellExecInput, tabID, defaultBlo
 
 	tail, truncated := readBlockTail(ctx, blockID)
 
+	var spilloverLog string
+	if truncated {
+		fullOutput := readBlockFull(ctx, blockID)
+		if fullOutput != "" {
+			spillFile, spillErr := writeSpillover(fullOutput)
+			if spillErr == nil {
+				spilloverLog = spillFile
+			}
+		}
+	}
+
 	return &shellExecOutput{
-		BlockID:    blockID,
-		ExitCode:   exitCode,
-		DurationMs: durationMs,
-		StdoutTail: tail,
-		Truncated:  truncated,
-		TimedOut:   timedOut,
+		BlockID:      blockID,
+		ExitCode:     exitCode,
+		DurationMs:   durationMs,
+		StdoutTail:   tail,
+		Truncated:    truncated,
+		TimedOut:     timedOut,
+		SpilloverLog: spilloverLog,
 	}, nil
 }
 
@@ -331,6 +343,40 @@ func repairUTF8(s string) string {
 		i += size
 	}
 	return b.String()
+}
+
+const spilloverMaxBytes = 512 * 1024
+
+func readBlockFull(ctx context.Context, blockID string) string {
+	wfile, err := filestore.WFS.Stat(ctx, blockID, wavebase.BlockFile_Term)
+	if err != nil || wfile == nil || wfile.Size <= 0 {
+		return ""
+	}
+	readLen := wfile.Size
+	if readLen > spilloverMaxBytes {
+		readLen = spilloverMaxBytes
+	}
+	_, data, err := filestore.WFS.ReadAt(ctx, blockID, wavebase.BlockFile_Term, 0, readLen)
+	if err != nil {
+		return ""
+	}
+	return stripAnsi(repairUTF8(string(data)))
+}
+
+func writeSpillover(content string) (string, error) {
+	dir := filepath.Join(os.TempDir(), "crest-spillover")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+	f, err := os.CreateTemp(dir, "shell-*.log")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := f.WriteString(content); err != nil {
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 func truncCmd(cmd string) string {

@@ -4,6 +4,8 @@
 package agent
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -57,4 +59,29 @@ func BuildTerminalContext(sess *Session) string {
 	}
 	b.WriteString("</terminal_context>")
 	return b.String()
+}
+
+const maxGuidelinesSize = 32 * 1024
+
+func LoadProjectGuidelines(cwd string) string {
+	if cwd == "" {
+		return ""
+	}
+	candidates := []string{"AGENTS.md", "CLAUDE.md"}
+	for _, name := range candidates {
+		path := filepath.Join(cwd, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		content := strings.TrimSpace(string(data))
+		if content == "" {
+			continue
+		}
+		if len(content) > maxGuidelinesSize {
+			content = content[:maxGuidelinesSize]
+		}
+		return "<project_guidelines source=\"" + name + "\">\n" + content + "\n</project_guidelines>"
+	}
+	return ""
 }

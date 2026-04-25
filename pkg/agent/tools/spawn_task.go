@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	SpawnTaskTimeout  = 120 * time.Second
-	SpawnTaskMaxSteps = 15
+	SpawnTaskTimeout  = 600 * time.Second
+	SpawnTaskMaxSteps = 30
 )
 
 type spawnTaskInput struct {
@@ -39,7 +39,7 @@ func SpawnTask(cfg SpawnTaskConfig, approval func(any) string) uctypes.ToolDefin
 	return uctypes.ToolDefinition{
 		Name:        "spawn_task",
 		DisplayName: "Spawn Sub-Task",
-		Description: "Delegate a scoped sub-task to a child agent with isolated conversation context. Returns a summary when done. Use for independent sub-tasks like 'read and summarize this file' or 'find all TODO comments'. Max 15 steps.",
+		Description: "Delegate a scoped sub-task to a child agent with isolated conversation context. Returns the sub-agent's final response text. Use for independent sub-tasks like 'read and summarize this file' or 'find all TODO comments'. Multiple spawn_task calls in a single response run in parallel.",
 		ToolLogName: "agent:spawn_task",
 		InputSchema: map[string]any{
 			"type": "object",

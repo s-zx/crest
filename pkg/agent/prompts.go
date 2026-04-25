@@ -17,6 +17,7 @@ var (
 	askPrompt    = mustLoadPrompt("ask.md")
 	planPrompt   = mustLoadPrompt("plan.md")
 	doPrompt     = mustLoadPrompt("do.md")
+	benchPrompt  = mustLoadPrompt("bench.md")
 )
 
 func mustLoadPrompt(name string) string {
@@ -42,6 +43,8 @@ func SystemPromptForMode(mode *Mode) []string {
 		modePrompt = planPrompt
 	case ModeDo:
 		modePrompt = doPrompt
+	case ModeBench:
+		modePrompt = benchPrompt
 	default:
 		modePrompt = doPrompt
 	}

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/s-zx/crest/pkg/agent/tools"
 	"github.com/s-zx/crest/pkg/aiusechat"
 	"github.com/s-zx/crest/pkg/aiusechat/uctypes"
 	"github.com/s-zx/crest/pkg/web/sse"
@@ -51,12 +52,20 @@ func RunAgent(ctx context.Context, sseHandler *sse.SSEHandlerCh, clientID string
 	if skills := DiscoverSkills(opts.Session.Cwd); len(skills) > 0 {
 		systemPrompt = append(systemPrompt, BuildSkillsContext(skills))
 	}
+	if guidelines := LoadProjectGuidelines(opts.Session.Cwd); guidelines != "" {
+		systemPrompt = append(systemPrompt, guidelines)
+	}
 	if opts.PlanContext != "" {
 		systemPrompt = append(systemPrompt, "## Active Plan\nExecute the following plan step by step:\n\n"+opts.PlanContext)
 	}
 
+	agentChatId := AgentChatStorePrefix + opts.Session.ChatID
+	maxSteps := DefaultMaxAgentSteps
+	if opts.Session.Mode != nil && opts.Session.Mode.StepBudget > 0 {
+		maxSteps = opts.Session.Mode.StepBudget
+	}
 	chatOpts := uctypes.WaveChatOpts{
-		ChatId:               AgentChatStorePrefix + opts.Session.ChatID,
+		ChatId:               agentChatId,
 		ClientId:             clientID,
 		Config:               opts.AIOpts,
 		Tools:                ToolsForMode(opts.Session),
@@ -64,13 +73,20 @@ func RunAgent(ctx context.Context, sseHandler *sse.SSEHandlerCh, clientID string
 		TabId:                opts.Session.TabID,
 		AllowNativeWebSearch: false,
 		Source:               AgentSourceName,
-		MaxSteps:             DefaultMaxAgentSteps,
+		MaxSteps:             maxSteps,
 		ContextBudget:        DefaultContextBudget,
 		MetricsCallback:      makeTrajectoryWriter(opts.Session.Cwd, opts.Session.ChatID),
-		FileChangeCallback:   makeFileChangeRecorder(AgentChatStorePrefix+opts.Session.ChatID, opts.UserMsg.MessageId),
+		FileChangeCallback:   makeFileChangeRecorder(agentChatId, opts.UserMsg.MessageId),
+		PendingTodosCheck:    makePendingTodosCheck(agentChatId),
 	}
 
 	return aiusechat.WaveAIPostMessageWrap(ctx, sseHandler, opts.UserMsg, chatOpts)
+}
+
+func makePendingTodosCheck(chatId string) func() bool {
+	return func() bool {
+		return tools.HasPendingTodos(chatId)
+	}
 }
 
 func makeFileChangeRecorder(chatId string, checkpointId string) func(string, string, bool) {
