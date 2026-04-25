@@ -100,6 +100,16 @@ Tracking the prioritized roadmap in [`agent-optimization-roadmap.md`](./agent-op
 - [x] Dangerous command detection — 12 regex patterns in `IsDangerousCommand()` covering rm -rf, force push, hard reset, pipe-to-shell, dd, mkfs, chmod 777, etc. Wired into shell_exec via `ToolVerifyInput` — forces approval even when mode auto-approves. 43 test cases.
 - [x] Structured audit log — `ToolAuditEvent` type on `AIMetrics.AuditLog`. Each tool call emits timestamp, chatId, tool name, callId, truncated input, approval, duration, outcome, error. 1 test.
 
+## Optimization (Tier 2 — production-quality UX)
+
+- [x] Anthropic prompt caching — `cache_control: {type: "ephemeral"}` on last system prompt block + last tool definition. Uses `anthropicCachedToolDef` wrapper. Cache usage already tracked from responses.
+- [x] Parallel tool execution — `Parallel` field on ToolDefinition. When all tool calls in a step are Parallel=true and none need approval, runs them concurrently via sync.WaitGroup. Marked: read_text_file, read_dir, get_scrollback, cmd_history.
+- [x] Golden transcripts expanded to 21 — 18 new tests covering read/write/plan modes, error cases, multi-turn, cross-tool flows.
+- [x] Live token counter in overlay — Backend sends `data-usage` SSE event after each step. Frontend `TermAgentTokenCounter` renders formatted total in overlay header.
+- [x] Runtime model switcher — `:model <name>` inline command in overlay. Frontend intercepts, stores override, includes `modeloverride` in request. Backend applies override to AIOptsType.
+- [ ] Diff preview for write_text_file — needs UI design: backend generates unified diff, frontend renders diff viewer with approve/reject. Hold for live testing.
+- [ ] Plan → Do handoff — needs UI design: "Execute Plan" button after :plan completes, switches to :do mode with plan as context. Hold for live testing.
+
 ## Architecture
 
 - **`pkg/agent` = policy, `pkg/aiusechat` = mechanism.** One-way dependency.
