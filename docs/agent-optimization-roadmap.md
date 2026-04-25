@@ -97,27 +97,27 @@ Seven dimensions, each with concrete gaps observed in the current implementation
 
 Three tiers. Tier 1 is "blocks calling this production." Tier 2 is "production-grade UX." Tier 3 is polish and stretch.
 
-### Tier 1 — Critical (≈ 2–3 weeks)
+### Tier 1 — Critical ✅
 
-Goal: the agent doesn't silently break, run away, or destroy user work.
+1. ~~**LLM retry with exponential backoff**~~ ✅
+2. ~~**Step budget enforcement**~~ ✅
+3. ~~**Context compaction at 80% threshold**~~ ✅
+4. ~~**Dangerous command detection**~~ ✅
+5. ~~**Structured audit log**~~ ✅
 
-1. **LLM retry with exponential backoff** — wrap `runAIChatStep()` calls. Retry on 429/5xx/network; cap at N attempts with jitter.
-2. **Step budget enforcement** — `max_steps` config (default 50); hard stop + surface reason; track per-session.
-3. **Context compaction at 80% threshold** — summarize older turns via the same model, keep last N turns verbatim, preserve tool-result pointers.
-4. **Dangerous command detection** — literal pattern list (`rm -rf`, `mkfs`, `dd if=`, `git push --force`, `curl … | sh`, etc.) that forces approval even in auto-approve flows.
-5. **Structured audit log** — one JSON event per tool call: timestamp, tool, args, approval source, duration, outcome. Persist per chatstore entry.
+### Tier 2 — Important ✅
 
-### Tier 2 — Important (≈ 2–3 weeks)
+6. ~~**Prompt caching (Anthropic)**~~ ✅
+7. ~~**Parallel tool execution**~~ ✅
+8. ~~**Live token / cost counter**~~ ✅
+9. ~~**Diff preview (write + edit)**~~ ✅ — jsdiff + structuredPatch
+10. ~~**Plan → Do handoff**~~ ✅
+11. ~~**Runtime model switcher**~~ ✅
+12. ~~**Expanded golden transcripts (21)**~~ ✅
 
-Goal: quality-of-life that users will notice; performance that keeps bills sane.
+### Bonus — Warp-Style Inline Blocks ✅
 
-6. **Prompt caching (Anthropic)** — cache_control on system prompt + skills block + tool schemas.
-7. **Parallel tool execution** — when the model emits multiple tool calls in one step and they're side-effect-free (`read_file`, `list_directory`, `grep`), run them concurrently.
-8. **Live token / cost counter in overlay** — surface per-turn and cumulative usage; persist per chat.
-9. **Diff preview for `write_text_file`** — render unified diff; require approval in `:do` mode; keyboard shortcuts.
-10. **Plan → Do handoff** — after `:plan`, offer "approve and execute" that switches mode and feeds the plan as the initial message.
-11. **Runtime model switcher** — `:model <name>` inline command, updates session only.
-12. **Expanded golden transcripts (20+)** — one per tool happy path, one per tool edge/error, cross-tool flows.
+- ~~**Replace overlay with inline timeline**~~ ✅ — agent messages render as blocks in the terminal stream
 
 ### Tier 3 — Polish / Stretch (open-ended)
 
@@ -129,7 +129,7 @@ Goal: capabilities that separate a good agent from a great one.
 16. **Tool sandboxing** — opt-in container/VM for `:do` tasks; per-task filesystem isolation.
 17. **Conversation rewind / fork** — step index → new branch; UI for browsing history tree.
 18. **Full Harbor nightly run** — all tasks, scored, trended; regression alerts.
-19. **CI regression gate** — block PR merge on golden-suite failure.
+19. ~~**CI regression gate**~~ ✅ — GitHub Actions workflow for agent tests
 20. **Trajectory viewer** — replay a session step-by-step, show diffs, timing, token usage.
 
 ---
