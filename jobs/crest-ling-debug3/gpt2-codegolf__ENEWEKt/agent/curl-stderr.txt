@@ -1,14 +1,0 @@
-Note: Unnecessary use of -X or --request, POST is already inferred.
-* Host localhost:1819 was resolved.
-* IPv6: ::1
-* IPv4: 127.0.0.1
-  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
-                                 Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0*   Trying [::1]:1819...
-* connect to ::1 port 1819 from ::1 port 52236 failed: Connection refused
-*   Trying 127.0.0.1:1819...
-* connect to 127.0.0.1 port 1819 from 127.0.0.1 port 36558 failed: Connection refused
-* Failed to connect to localhost port 1819 after 12 ms: Couldn't connect to server
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
-* Closing connection
-curl: (7) Failed to connect to localhost port 1819 after 12 ms: Couldn't connect to server

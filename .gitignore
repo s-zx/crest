@@ -45,3 +45,8 @@ docs/superpowers
 .claude
 ROADMAP.md
 ROADMAP-v2.md
+
+# TB2 benchmark results
+jobs/
+__pycache__/
+.env
