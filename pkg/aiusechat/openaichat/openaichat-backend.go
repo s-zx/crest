@@ -161,6 +161,10 @@ func processChatStream(
 			continue
 		}
 
+		if wavebase.IsDevMode() {
+			log.Printf("openaichat: raw-data len=%d data=%s\n", len(data), utilfn.TruncateString(data, 300))
+		}
+
 		var chunk StreamChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 			log.Printf("openaichat: failed to parse chunk: %v (data=%s)\n", err, utilfn.TruncateString(data, 100))
