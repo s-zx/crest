@@ -128,9 +128,12 @@ func ShellExec(tabID, defaultBlockID, defaultCwd, defaultConnection string, appr
 			if err != nil {
 				return nil, err
 			}
+			if tabID == "" {
+				return runHeadlessShell(parsed, defaultCwd)
+			}
 			out, err := runShellExec(context.Background(), parsed, tabID, defaultBlockID, defaultCwd, defaultConnection)
 			if err != nil {
-				return nil, err
+				return runHeadlessShell(parsed, defaultCwd)
 			}
 			if toolUseData != nil {
 				toolUseData.BlockId = out.BlockID
