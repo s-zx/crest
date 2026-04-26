@@ -151,7 +151,16 @@ func buildChatHTTPRequest(ctx context.Context, messages []ChatRequestMessage, ch
 
 	req.Header.Set("Accept", "text/event-stream")
 
+	if isOpenRouterEndpoint(opts.Endpoint) {
+		req.Header.Set("HTTP-Referer", "https://github.com/s-zx/crest")
+		req.Header.Set("X-Title", "Crest Agent")
+	}
+
 	return req, nil
+}
+
+func isOpenRouterEndpoint(endpoint string) bool {
+	return strings.Contains(strings.ToLower(endpoint), "openrouter.ai")
 }
 
 // ConvertAIMessageToStoredChatMessage converts an AIMessage to StoredChatMessage

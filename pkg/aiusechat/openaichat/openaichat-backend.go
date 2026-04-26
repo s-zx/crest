@@ -103,10 +103,13 @@ func processChatStream(
 ) (*uctypes.WaveStopReason, *StoredChatMessage, error) {
 	decoder := eventsource.NewDecoder(body)
 	var textBuilder strings.Builder
+	var reasoningBuilder strings.Builder
 	msgID := uuid.New().String()
 	textID := uuid.New().String()
+	reasoningID := uuid.New().String()
 	var finishReason string
 	textStarted := false
+	reasoningStarted := false
 	var toolCallsInProgress []ToolCall
 
 	if cont == nil {
@@ -168,6 +171,14 @@ func processChatStream(
 		}
 
 		choice := chunk.Choices[0]
+		if choice.Delta.Reasoning != "" {
+			if !reasoningStarted {
+				_ = sseHandler.AiMsgReasoningStart(reasoningID)
+				reasoningStarted = true
+			}
+			reasoningBuilder.WriteString(choice.Delta.Reasoning)
+			_ = sseHandler.AiMsgReasoningDelta(reasoningID, choice.Delta.Reasoning)
+		}
 		if choice.Delta.Content != "" {
 			if !textStarted {
 				_ = sseHandler.AiMsgTextStart(textID)
@@ -207,11 +218,27 @@ func processChatStream(
 		}
 	}
 
+	if reasoningStarted {
+		_ = sseHandler.AiMsgReasoningEnd(reasoningID)
+	}
+	if textBuilder.Len() == 0 && reasoningBuilder.Len() > 0 && len(toolCallsInProgress) == 0 {
+		text := reasoningBuilder.String()
+		if !textStarted {
+			_ = sseHandler.AiMsgTextStart(textID)
+			textStarted = true
+		}
+		textBuilder.WriteString(text)
+		_ = sseHandler.AiMsgTextDelta(textID, text)
+	}
+
 	stopKind := uctypes.StopKindDone
-	if finishReason == "length" {
+	switch finishReason {
+	case "length":
 		stopKind = uctypes.StopKindMaxTokens
-	} else if finishReason == "tool_calls" {
+	case "tool_calls", "function_call":
 		stopKind = uctypes.StopKindToolUse
+	case "content_filter":
+		stopKind = uctypes.StopKindContent
 	}
 
 	var validToolCalls []ToolCall

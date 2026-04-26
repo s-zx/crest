@@ -1,0 +1,28 @@
+{
+    "id": "ee70822d-b4b7-42cf-a9d7-87150cd0f30d",
+    "started_at": "2026-04-26T09:30:10.640192",
+    "finished_at": "2026-04-26T09:37:25.673531",
+    "n_total_trials": 1,
+    "stats": {
+        "n_trials": 1,
+        "n_errors": 1,
+        "evals": {
+            "crest__terminal-bench": {
+                "n_trials": 0,
+                "n_errors": 1,
+                "metrics": [
+                    {
+                        "mean": 0.0
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {},
+                "exception_stats": {
+                    "AgentSetupTimeoutError": [
+                        "gpt2-codegolf__Yc4LNDE"
+                    ]
+                }
+            }
+        }
+    }
+}

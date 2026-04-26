@@ -1,0 +1,106 @@
+{
+    "id": "88516092-690f-4faa-9451-53873269fa1f",
+    "task_name": "gpt2-codegolf",
+    "trial_name": "gpt2-codegolf__i6hCJot",
+    "trial_uri": "file:///Users/user/.config/superpowers/worktrees/crest/feat-native-agent/jobs/crest-ling-debug2/gpt2-codegolf__i6hCJot",
+    "task_id": {
+        "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+        "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+        "path": "gpt2-codegolf"
+    },
+    "source": "terminal-bench",
+    "task_checksum": "c3dfea370953fe9b6cb53d368f1f242af2833cf1af623849bdaee8fe026b1cf1",
+    "config": {
+        "task": {
+            "path": "gpt2-codegolf",
+            "git_url": "https://github.com/laude-institute/terminal-bench-2.git",
+            "git_commit_id": "69671fbaac6d67a7ef0dfec016cc38a64ef7a77c",
+            "name": null,
+            "ref": null,
+            "overwrite": false,
+            "download_dir": null,
+            "source": "terminal-bench"
+        },
+        "trial_name": "gpt2-codegolf__i6hCJot",
+        "trials_dir": "jobs/crest-ling-debug2",
+        "timeout_multiplier": 2.0,
+        "agent_timeout_multiplier": null,
+        "verifier_timeout_multiplier": null,
+        "agent_setup_timeout_multiplier": 3.0,
+        "environment_build_timeout_multiplier": null,
+        "agent": {
+            "name": null,
+            "import_path": "eval.harbor.crest_agent:CrestAgent",
+            "model_name": null,
+            "override_timeout_sec": null,
+            "override_setup_timeout_sec": null,
+            "max_timeout_sec": null,
+            "kwargs": {},
+            "env": {}
+        },
+        "environment": {
+            "type": "docker",
+            "import_path": null,
+            "force_build": false,
+            "delete": true,
+            "override_cpus": null,
+            "override_memory_mb": null,
+            "override_storage_mb": null,
+            "override_gpus": null,
+            "suppress_override_warnings": false,
+            "mounts_json": null,
+            "env": {},
+            "kwargs": {}
+        },
+        "verifier": {
+            "override_timeout_sec": null,
+            "max_timeout_sec": null,
+            "env": {},
+            "disable": false
+        },
+        "artifacts": [
+            "/logs/agent/wavesrv.log",
+            "/logs/agent/curl-stderr.txt",
+            "/logs/agent/crest-agent.txt"
+        ],
+        "job_id": "c540f3e1-db53-4ae7-846b-44659c135145"
+    },
+    "agent_info": {
+        "name": "crest",
+        "version": "0.1.0",
+        "model_info": null
+    },
+    "agent_result": {
+        "n_input_tokens": null,
+        "n_cache_tokens": null,
+        "n_output_tokens": null,
+        "cost_usd": null,
+        "rollout_details": null,
+        "metadata": null
+    },
+    "verifier_result": {
+        "rewards": {
+            "reward": 0.0
+        }
+    },
+    "exception_info": null,
+    "started_at": "2026-04-26T07:55:36.414642Z",
+    "finished_at": "2026-04-26T08:03:16.856830Z",
+    "environment_setup": {
+        "started_at": "2026-04-26T07:55:36.442546Z",
+        "finished_at": "2026-04-26T07:56:42.253861Z"
+    },
+    "agent_setup": {
+        "started_at": "2026-04-26T07:56:42.253927Z",
+        "finished_at": "2026-04-26T08:02:09.390228Z"
+    },
+    "agent_execution": {
+        "started_at": "2026-04-26T08:02:09.390359Z",
+        "finished_at": "2026-04-26T08:02:40.868708Z"
+    },
+    "verifier": {
+        "started_at": "2026-04-26T08:02:41.025735Z",
+        "finished_at": "2026-04-26T08:03:14.250678Z"
+    },
+    "step_results": null
+}

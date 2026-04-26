@@ -144,7 +144,7 @@ func buildAIOptsFromSettings() (*uctypes.AIOptsType, error) {
 	baseUrl := settings.AiBaseURL
 	model := settings.AiModel
 	if apiType == "" {
-		apiType = "openai-chat"
+		apiType = detectAPIType(baseUrl)
 	}
 	apiToken := settings.AiApiToken
 	if apiToken == "" && settings.AiApiTokenSecretName != "" {
@@ -174,6 +174,20 @@ func buildAIOptsFromSettings() (*uctypes.AIOptsType, error) {
 		Verbosity:     uctypes.VerbosityLevelMedium,
 		Capabilities:  []string{uctypes.AICapabilityTools},
 	}, nil
+}
+
+func detectAPIType(endpoint string) string {
+	e := strings.ToLower(endpoint)
+	switch {
+	case strings.Contains(e, "anthropic.com"):
+		return uctypes.APIType_AnthropicMessages
+	case strings.Contains(e, "generativelanguage.googleapis.com"):
+		return uctypes.APIType_GoogleGemini
+	case strings.Contains(e, "responses"):
+		return uctypes.APIType_OpenAIResponses
+	default:
+		return uctypes.APIType_OpenAIChat
+	}
 }
 
 func AgentWorktreeHandler(w http.ResponseWriter, r *http.Request) {

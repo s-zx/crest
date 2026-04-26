@@ -33,6 +33,15 @@ CREST_BRANCH = "feat/native-agent"
 AGENT_API_PATH = "/api/post-agent-message"
 
 
+def _detect_api_type(base_url: str) -> str:
+    url = base_url.lower()
+    if "anthropic.com" in url:
+        return "anthropic-messages"
+    if "generativelanguage.googleapis.com" in url:
+        return "google-gemini"
+    return "openai-chat"
+
+
 class CrestAgent(BaseInstalledAgent):
     """Harbor adapter that installs and runs Crest's native coding agent."""
 
@@ -76,10 +85,15 @@ class CrestAgent(BaseInstalledAgent):
         environment: BaseEnvironment,
         context: AgentContext,
     ) -> None:
-        model = os.environ.get("HARBOR_MODEL", "anthropic/claude-sonnet-4-20250514")
+        model = self.model_name or os.environ.get("HARBOR_MODEL", "anthropic/claude-sonnet-4-20250514")
         api_key = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", "")
-        api_type = os.environ.get("CREST_API_TYPE", "openai-chat")
         base_url = os.environ.get("CREST_BASE_URL", "")
+        api_type = os.environ.get("CREST_API_TYPE", "")
+
+        if not base_url:
+            base_url = "https://openrouter.ai/api/v1"
+        if not api_type:
+            api_type = _detect_api_type(base_url)
 
         auth_key = secrets.token_hex(32)
         env_vars = {

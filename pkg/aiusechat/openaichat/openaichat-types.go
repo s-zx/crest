@@ -191,10 +191,10 @@ type StreamChoice struct {
 	FinishReason *string      `json:"finish_reason"` // "stop", "length" | "tool_calls" | "content_filter"
 }
 
-// This is the important part:
 type ContentDelta struct {
 	Role      string          `json:"role,omitempty"`
 	Content   string          `json:"content,omitempty"`
+	Reasoning string          `json:"reasoning,omitempty"`
 	ToolCalls []ToolCallDelta `json:"tool_calls,omitempty"`
 }
 
