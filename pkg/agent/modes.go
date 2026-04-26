@@ -139,8 +139,6 @@ var modes = map[string]*Mode{
 			"read_text_file",
 			"read_dir",
 			"search",
-			"get_scrollback",
-			"cmd_history",
 			"write_text_file",
 			"edit_text_file",
 			"multi_edit",

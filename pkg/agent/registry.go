@@ -48,6 +48,9 @@ func buildTool(name string, sess *Session) (uctypes.ToolDefinition, bool) {
 	case "edit_text_file":
 		return tools.EditTextFile(approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	case "shell_exec":
+		if sess.TabID == "" {
+			return tools.HeadlessShellExec(sess.Cwd, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
+		}
 		return tools.ShellExec(sess.TabID, sess.BlockID, sess.Cwd, sess.Connection, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	case "write_plan":
 		return tools.WritePlan(sess.TabID, sess.BlockID, sess.Cwd, sess.Connection, approvalResolver(sess, name, uctypes.ApprovalAutoApproved)), true

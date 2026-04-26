@@ -101,8 +101,8 @@ func TestModeToolNames(t *testing.T) {
 	}
 
 	benchMode, _ := LookupMode(ModeBench)
-	if len(benchMode.ToolNames) != 13 {
-		t.Fatalf("bench mode should have 13 tools, got %d", len(benchMode.ToolNames))
+	if len(benchMode.ToolNames) != 11 {
+		t.Fatalf("bench mode should have 11 tools, got %d", len(benchMode.ToolNames))
 	}
 }
 
