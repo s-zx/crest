@@ -41,7 +41,7 @@ type rgMatch struct {
 	} `json:"data"`
 }
 
-func Search(approval func(any) string) uctypes.ToolDefinition {
+func Search(defaultCwd string, approval func(any) string) uctypes.ToolDefinition {
 	return uctypes.ToolDefinition{
 		Name:        "search",
 		DisplayName: "Search",
@@ -97,6 +97,9 @@ func Search(approval func(any) string) uctypes.ToolDefinition {
 			parsed, err := parseSearchInput(input)
 			if err != nil {
 				return "", err
+			}
+			if parsed.Path == "" && defaultCwd != "" {
+				parsed.Path = defaultCwd
 			}
 			return runSearch(parsed)
 		},

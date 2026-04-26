@@ -269,6 +269,10 @@ func processChatStream(
 		}
 	}
 
+	if len(validToolCalls) > 0 && stopKind != uctypes.StopKindToolUse {
+		stopKind = uctypes.StopKindToolUse
+	}
+
 	var waveToolCalls []uctypes.WaveToolCall
 	if len(validToolCalls) > 0 {
 		for _, tc := range validToolCalls {
@@ -300,10 +304,9 @@ func processChatStream(
 		},
 	}
 
+	assistantMsg.Message.Content = textBuilder.String()
 	if len(validToolCalls) > 0 {
 		assistantMsg.Message.ToolCalls = validToolCalls
-	} else {
-		assistantMsg.Message.Content = textBuilder.String()
 	}
 
 	if textStarted {

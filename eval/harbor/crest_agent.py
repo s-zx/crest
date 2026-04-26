@@ -57,19 +57,19 @@ class CrestAgent(BaseInstalledAgent):
             environment,
             command=(
                 "apt-get update && "
-                "apt-get install -y --no-install-recommends git curl build-essential && "
+                "apt-get install -y --no-install-recommends git curl build-essential ripgrep && "
                 "curl -fsSL https://go.dev/dl/go1.25.6.linux-amd64.tar.gz | tar -C /usr/local -xzf - && "
                 "ln -sf /usr/local/go/bin/go /usr/local/bin/go"
             ),
         )
 
-        await self.exec_as_agent(
+        await self.exec_as_root(
             environment,
             command=(
                 f"git clone --depth=1 --branch {CREST_BRANCH} {CREST_REPO} /tmp/crest && "
                 "cd /tmp/crest && "
-                "go build -o /usr/local/bin/wavesrv ./cmd/server && "
-                "rm -rf /tmp/crest"
+                "GOPATH=/tmp/gopath GOCACHE=/tmp/gocache go build -o /usr/local/bin/wavesrv ./cmd/server && "
+                "rm -rf /tmp/crest /tmp/gopath /tmp/gocache"
             ),
         )
 
@@ -116,8 +116,8 @@ class CrestAgent(BaseInstalledAgent):
 
         request_body = json.dumps({
             "chatid": chat_id,
-            "tabid": "eval-tab",
-            "blockid": "eval-block",
+            "tabid": "",
+            "blockid": "",
             "mode": "bench",
             "aimode": "",
             "msg": {
@@ -155,7 +155,7 @@ class CrestAgent(BaseInstalledAgent):
             f"  exit 1; "
             f"fi && "
             f"echo 'wavesrv web at '$WEB_ADDR && "
-            f"curl -s -N -X POST http://$WEB_ADDR{AGENT_API_PATH} "
+            f"curl -s -N --max-time 1800 -X POST http://$WEB_ADDR{AGENT_API_PATH} "
             f"-H 'Content-Type: application/json' "
             f"-H 'X-AuthKey: {auth_key}' "
             f"-d {shlex.quote(request_body)} "

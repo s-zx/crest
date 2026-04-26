@@ -64,7 +64,7 @@ func buildTool(name string, sess *Session) (uctypes.ToolDefinition, bool) {
 	case "browser.screenshot":
 		return tools.BrowserScreenshot(sess.TabID, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	case "search":
-		return tools.Search(approvalResolver(sess, name, uctypes.ApprovalAutoApproved)), true
+		return tools.Search(sess.Cwd, approvalResolver(sess, name, uctypes.ApprovalAutoApproved)), true
 	case "multi_edit":
 		return tools.MultiEdit(approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	case "todo_write":

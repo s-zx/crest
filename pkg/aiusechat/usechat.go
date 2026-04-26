@@ -514,6 +514,7 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 	firstStep := true
 	stepBudgetWarned := false
 	doomLoopWarned := false
+	pendingTodosNudged := false
 	var lastInputTokens int
 	var cont *uctypes.WaveContinueResponse
 	var recentToolSigs []string
@@ -633,7 +634,8 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 			}
 			continue
 		}
-		if chatOpts.PendingTodosCheck != nil && chatOpts.PendingTodosCheck() {
+		if chatOpts.PendingTodosCheck != nil && chatOpts.PendingTodosCheck() && !pendingTodosNudged {
+			pendingTodosNudged = true
 			chatOpts.SystemPrompt = append(chatOpts.SystemPrompt,
 				"You have pending todo items that are not yet completed. Do not stop — continue working on the remaining items. Use `todo_read` to review your progress.")
 			cont = &uctypes.WaveContinueResponse{

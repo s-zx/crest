@@ -327,7 +327,7 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	mode, ok := LookupMode(req.Mode)
 	if !ok {
-		http.Error(w, fmt.Sprintf("unknown agent mode %q (valid: ask, plan, do)", req.Mode), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("unknown agent mode %q (valid: ask, plan, do, bench)", req.Mode), http.StatusBadRequest)
 		return
 	}
 
