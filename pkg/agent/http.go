@@ -80,6 +80,7 @@ type PostAgentMessageRequest struct {
 	TabId         string            `json:"tabid"`
 	BlockId       string            `json:"blockid"`
 	Mode          string            `json:"mode"`
+	PermissionMode string           `json:"permission_mode,omitempty"`
 	AIMode        string            `json:"aimode"`
 	ModelOverride string            `json:"modeloverride,omitempty"`
 	PlanPath      string            `json:"planpath,omitempty"`
@@ -169,7 +170,7 @@ func buildAIOptsFromSettings() (*uctypes.AIOptsType, error) {
 		Model:         model,
 		Endpoint:      baseUrl,
 		APIToken:      apiToken,
-		MaxTokens:     4096,
+		MaxTokens:     16384,
 		ThinkingLevel: uctypes.ThinkingLevelMedium,
 		Verbosity:     uctypes.VerbosityLevelMedium,
 		Capabilities:  []string{uctypes.AICapabilityTools},
@@ -330,6 +331,11 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("unknown agent mode %q (valid: ask, plan, do, bench)", req.Mode), http.StatusBadRequest)
 		return
 	}
+	permissionMode, ok := ParsePermissionMode(req.PermissionMode)
+	if !ok {
+		http.Error(w, fmt.Sprintf("unknown permission_mode %q (valid: default, accept_edits, bypass)", req.PermissionMode), http.StatusBadRequest)
+		return
+	}
 
 	if err := req.Msg.Validate(); err != nil {
 		http.Error(w, fmt.Sprintf("Message validation failed: %v", err), http.StatusBadRequest)
@@ -355,6 +361,7 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 		TabID:       req.TabId,
 		BlockID:     req.BlockId,
 		Mode:        mode,
+		PermissionMode: permissionMode,
 		AIOpts:      *aiOpts,
 		Cwd:         req.Context.Cwd,
 		Connection:  req.Context.Connection,
