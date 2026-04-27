@@ -162,6 +162,41 @@ func (cs *ChatStore) CompactMessages(chatId string, keepFirst, keepLast int) int
 	return removed
 }
 
+// CollapseOldToolResults shrinks the inline content of older tool result
+// messages without removing them. The most recent keepLastN messages are
+// left untouched. For each older message that implements
+// uctypes.ToolResultCollapsible (every backend's tool-result-bearing type
+// does), the tool result body is replaced with `placeholder`.
+//
+// Returns the total number of tool result blocks/parts collapsed across
+// all touched messages. Zero means nothing to do (e.g. history shorter
+// than keepLastN, or all older messages are non-tool-result).
+//
+// This is the cheap tier between proactive microcompact (which deletes
+// whole messages) and reactive summary compact (which is heavier and
+// loses message structure).
+func (cs *ChatStore) CollapseOldToolResults(chatId string, keepLastN int, placeholder string) int {
+	cs.lock.Lock()
+	defer cs.lock.Unlock()
+
+	chat := cs.chats[chatId]
+	if chat == nil {
+		return 0
+	}
+	total := len(chat.NativeMessages)
+	if total <= keepLastN {
+		return 0
+	}
+	collapsed := 0
+	limit := total - keepLastN
+	for i := 0; i < limit; i++ {
+		if c, ok := chat.NativeMessages[i].(uctypes.ToolResultCollapsible); ok {
+			collapsed += c.CollapseToolResults(placeholder)
+		}
+	}
+	return collapsed
+}
+
 func (cs *ChatStore) CompactMessagesWithSummary(chatId string, keepFirst, keepLast int) (string, int) {
 	cs.lock.Lock()
 	defer cs.lock.Unlock()

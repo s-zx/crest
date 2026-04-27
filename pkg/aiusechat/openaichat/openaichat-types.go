@@ -240,6 +240,23 @@ func (m *StoredChatMessage) DependsOnPrev() bool {
 	return m.Message.Role == "tool"
 }
 
+// CollapseToolResults replaces the body of a role:"tool" message with the
+// given placeholder. Multimodal ContentParts (images attached to a tool
+// reply, e.g. browser.screenshot) are dropped — fidelity for tokens trade.
+// ToolCallID and Name are preserved so the pairing with the prior assistant
+// message's tool_calls stays valid.
+func (m *StoredChatMessage) CollapseToolResults(placeholder string) int {
+	if m == nil || m.Message.Role != "tool" {
+		return 0
+	}
+	if len(m.Message.ContentParts) == 0 && len(m.Message.Content) <= len(placeholder) {
+		return 0
+	}
+	m.Message.Content = placeholder
+	m.Message.ContentParts = nil
+	return 1
+}
+
 func (m *StoredChatMessage) GetUsage() *uctypes.AIUsage {
 	if m.Usage == nil {
 		return nil

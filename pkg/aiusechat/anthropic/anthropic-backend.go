@@ -64,6 +64,31 @@ func (m *anthropicChatMessage) DependsOnPrev() bool {
 	return false
 }
 
+// CollapseToolResults replaces every tool_result block's Content with the
+// given placeholder string. Image/document tool_result content is dropped
+// in the process — context-collapse trades fidelity for tokens, and binary
+// blobs are the worst offenders. ToolUseID and IsError are preserved so the
+// pairing with the prior assistant tool_use stays valid.
+func (m *anthropicChatMessage) CollapseToolResults(placeholder string) int {
+	if m == nil {
+		return 0
+	}
+	count := 0
+	for i := range m.Content {
+		if m.Content[i].Type != "tool_result" {
+			continue
+		}
+		// Skip if it's already shorter than the placeholder — collapsing
+		// would be a tokens-net-zero or worse.
+		if s, ok := m.Content[i].Content.(string); ok && len(s) <= len(placeholder) {
+			continue
+		}
+		m.Content[i].Content = placeholder
+		count++
+	}
+	return count
+}
+
 func (m *anthropicChatMessage) GetUsage() *uctypes.AIUsage {
 	if m.Usage == nil {
 		return nil

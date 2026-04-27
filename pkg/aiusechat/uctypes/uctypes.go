@@ -380,6 +380,24 @@ type MessageDependsOnPrev interface {
 	DependsOnPrev() bool
 }
 
+// ToolResultCollapsible is implemented by native chat messages that carry
+// tool result content. Context-collapse (the lighter-touch sibling of full
+// compaction) walks older messages, type-asserts to this interface, and
+// replaces the long tool result text with `placeholder` while leaving the
+// message structure intact. This preserves tool_use → tool_result pairing
+// for the API and keeps the historical trail visible to the model — the
+// model still sees "I called X and got [collapsed]" rather than nothing.
+//
+// Implementations must:
+//   - leave message id, role, and tool-call ids untouched (so the message
+//     still pairs with its assistant-side tool_use);
+//   - replace ONLY the human-readable result content;
+//   - return the number of tool-result blocks/parts they collapsed (0 if
+//     there were none — a no-op is fine).
+type ToolResultCollapsible interface {
+	CollapseToolResults(placeholder string) (collapsed int)
+}
+
 const (
 	AIMessagePartTypeText = "text"
 	AIMessagePartTypeFile = "file"

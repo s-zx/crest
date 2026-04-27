@@ -141,6 +141,22 @@ func (m *OpenAIChatMessage) DependsOnPrev() bool {
 	return m.FunctionCallOutput != nil
 }
 
+// CollapseToolResults replaces a function_call_output's Output payload
+// with the placeholder string. CallId is preserved so the pairing with
+// the prior function_call stays valid. Non-function-call-output messages
+// (assistant text, user input, function_call) are no-ops — collapse only
+// touches the bulky tool result side of pairs.
+func (m *OpenAIChatMessage) CollapseToolResults(placeholder string) int {
+	if m == nil || m.FunctionCallOutput == nil {
+		return 0
+	}
+	if existing, ok := m.FunctionCallOutput.Output.(string); ok && len(existing) <= len(placeholder) {
+		return 0
+	}
+	m.FunctionCallOutput.Output = placeholder
+	return 1
+}
+
 func (m *OpenAIChatMessage) GetUsage() *uctypes.AIUsage {
 	if m.Usage == nil {
 		return nil

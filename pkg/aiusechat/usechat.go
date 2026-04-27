@@ -514,6 +514,70 @@ func extractCmdName(input any) string {
 	return name
 }
 
+// extractTouchedFilesFromAudit walks the audit log for write_text_file,
+// edit_text_file, and multi_edit calls, pulling the "filename" field out
+// of each call's InputArgs (which is a truncated JSON string). Used to
+// enrich the heavy-tier compaction summary so the model retains a list
+// of files it has worked on across compaction. Best-effort: malformed
+// JSON, missing fields, or non-file tools are silently skipped.
+//
+// Returns deduped paths in first-seen order, capped at maxFiles to keep
+// the summary readable.
+func extractTouchedFilesFromAudit(audit []uctypes.ToolAuditEvent, maxFiles int) []string {
+	if len(audit) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var ordered []string
+	for _, ev := range audit {
+		switch ev.ToolName {
+		case "write_text_file", "edit_text_file", "multi_edit":
+		default:
+			continue
+		}
+		// InputArgs is JSON, possibly truncated to 200 chars. Try to parse
+		// just the "filename" field. If truncation cut us off mid-JSON,
+		// fall back to a regex-style scan for "filename":"..." up to the
+		// next quote.
+		var probe struct {
+			Filename string `json:"filename"`
+		}
+		if json.Unmarshal([]byte(ev.InputArgs), &probe) == nil && probe.Filename != "" {
+			if !seen[probe.Filename] {
+				seen[probe.Filename] = true
+				ordered = append(ordered, probe.Filename)
+			}
+			continue
+		}
+		if fn := scanFilenameFromTruncated(ev.InputArgs); fn != "" && !seen[fn] {
+			seen[fn] = true
+			ordered = append(ordered, fn)
+		}
+	}
+	if maxFiles > 0 && len(ordered) > maxFiles {
+		ordered = ordered[:maxFiles]
+	}
+	return ordered
+}
+
+// scanFilenameFromTruncated handles the case where audit InputArgs got
+// truncated mid-JSON. Looks for the literal `"filename":"` and returns
+// the substring up to the next unescaped `"`. Cheap recovery for the
+// common case — gives up if the value itself was cut off.
+func scanFilenameFromTruncated(s string) string {
+	const key = `"filename":"`
+	i := strings.Index(s, key)
+	if i < 0 {
+		return ""
+	}
+	rest := s[i+len(key):]
+	end := strings.IndexByte(rest, '"')
+	if end < 0 {
+		return ""
+	}
+	return rest[:end]
+}
+
 // classifyToolError maps a tool's error text to a coarse ErrorType for
 // telemetry and loop-level decisions. The match is keyword-based because
 // our tools surface plain `error` values rather than typed errors —
@@ -731,17 +795,27 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 			}
 		}
 		if chatOpts.ContextBudget > 0 {
-			// Tiered compaction: kick in earlier with bigger keepLast
-			// (microcompact) so we trim history before getting close to the
-			// hard context window. Only the heavier 80% tier injects a summary
-			// message — the gentle tier just trims and trusts the model to
-			// notice if it lost something it cares about.
+			// Tiered context governance — three escalating tiers, picked by
+			// how close we are to the hard context limit:
+			//   50% → collapse: keep messages, shrink old tool result *content*
+			//                   to a placeholder (cheapest, preserves shape)
+			//   60% → microcompact: drop whole older messages (still no summary)
+			//   80% → heavy: summarize dropped range and inject a summary msg
+			// Each tier subsumes the next less-aggressive one's effect, so we
+			// only run the highest applicable tier per step (`switch`).
 			budget := chatOpts.ContextBudget
 			switch {
 			case lastInputTokens > budget*4/5:
 				summary, removed := chatstore.DefaultChatStore.CompactMessagesWithSummary(chatOpts.ChatId, 1, 10)
 				if removed > 0 {
 					log.Printf("context compaction (heavy): removed %d messages (input_tokens=%d, budget=%d)\n", removed, lastInputTokens, budget)
+					// Enrich the bare role-count summary with files the agent
+					// has touched across the whole turn — without this, the
+					// model can lose track of work it already did and start
+					// re-creating files it had written.
+					if files := extractTouchedFilesFromAudit(metrics.AuditLog, 30); len(files) > 0 {
+						summary = summary + "\nFiles modified during this conversation: " + strings.Join(files, ", ")
+					}
 					if summary != "" {
 						summaryMsg := &uctypes.AIMessage{
 							MessageId: uuid.New().String(),
@@ -757,6 +831,12 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 				removed := chatstore.DefaultChatStore.CompactMessages(chatOpts.ChatId, 1, 20)
 				if removed > 0 {
 					log.Printf("context compaction (microcompact): removed %d messages (input_tokens=%d, budget=%d)\n", removed, lastInputTokens, budget)
+				}
+			case lastInputTokens > budget/2:
+				const collapsePlaceholder = "[earlier tool result — collapsed for context]"
+				collapsed := chatstore.DefaultChatStore.CollapseOldToolResults(chatOpts.ChatId, 15, collapsePlaceholder)
+				if collapsed > 0 {
+					log.Printf("context governance (collapse): collapsed %d tool results (input_tokens=%d, budget=%d)\n", collapsed, lastInputTokens, budget)
 				}
 			}
 		}

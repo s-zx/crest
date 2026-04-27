@@ -39,6 +39,34 @@ func (m *GeminiChatMessage) DependsOnPrev() bool {
 	return false
 }
 
+// CollapseToolResults rewrites every functionResponse part's response map
+// to a single {"output": placeholder} field and drops nested multimodal
+// parts. Function name is preserved so the pairing with the prior model
+// turn's functionCall stays valid.
+func (m *GeminiChatMessage) CollapseToolResults(placeholder string) int {
+	if m == nil {
+		return 0
+	}
+	count := 0
+	for i := range m.Parts {
+		fr := m.Parts[i].FunctionResponse
+		if fr == nil {
+			continue
+		}
+		// Cheap size estimate: existing response stringified vs placeholder.
+		// Skip if already small (nothing to gain).
+		if len(fr.Parts) == 0 && len(fr.Response) == 1 {
+			if existing, ok := fr.Response["output"].(string); ok && len(existing) <= len(placeholder) {
+				continue
+			}
+		}
+		fr.Response = map[string]any{"output": placeholder}
+		fr.Parts = nil
+		count++
+	}
+	return count
+}
+
 func (m *GeminiChatMessage) GetUsage() *uctypes.AIUsage {
 	if m.Usage == nil {
 		return nil
