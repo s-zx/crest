@@ -34,9 +34,10 @@ func ToolsForMode(sess *Session) []uctypes.ToolDefinition {
 // buildTool maps a canonical tool name to its per-session ToolDefinition.
 // Unknown names are ignored so a typo in a mode definition fails safe.
 func buildTool(name string, sess *Session) (uctypes.ToolDefinition, bool) {
+	chatScope := AgentChatStorePrefix + sess.ChatID
 	switch name {
 	case "read_text_file":
-		return tools.ReadTextFile(approvalResolver(sess, name, uctypes.ApprovalAutoApproved)), true
+		return tools.ReadTextFile(chatScope, approvalResolver(sess, name, uctypes.ApprovalAutoApproved)), true
 	case "read_dir":
 		return tools.ReadDir(approvalResolver(sess, name, uctypes.ApprovalAutoApproved)), true
 	case "get_scrollback":
@@ -44,9 +45,9 @@ func buildTool(name string, sess *Session) (uctypes.ToolDefinition, bool) {
 	case "cmd_history":
 		return tools.CmdHistory(sess.BlockID, approvalResolver(sess, name, uctypes.ApprovalAutoApproved)), true
 	case "write_text_file":
-		return tools.WriteTextFile(approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
+		return tools.WriteTextFile(chatScope, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	case "edit_text_file":
-		return tools.EditTextFile(approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
+		return tools.EditTextFile(chatScope, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	case "shell_exec":
 		return tools.ShellExec(sess.TabID, sess.BlockID, sess.Cwd, sess.Connection, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	case "write_plan":
@@ -66,7 +67,7 @@ func buildTool(name string, sess *Session) (uctypes.ToolDefinition, bool) {
 	case "search":
 		return tools.Search(sess.Cwd, approvalResolver(sess, name, uctypes.ApprovalAutoApproved)), true
 	case "multi_edit":
-		return tools.MultiEdit(approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
+		return tools.MultiEdit(chatScope, approvalResolver(sess, name, uctypes.ApprovalNeedsApproval)), true
 	case "todo_write":
 		return tools.TodoWrite(AgentChatStorePrefix+sess.ChatID, approvalResolver(sess, name, uctypes.ApprovalAutoApproved)), true
 	case "todo_read":

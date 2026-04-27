@@ -92,6 +92,13 @@ type UIMessageDataUserFile struct {
 	PreviewUrl string `json:"previewurl,omitempty"`
 }
 
+// DefaultMaxToolResultSizeChars is the inline-result cap applied when a
+// tool's MaxResultSizeChars is unset. ~25K chars roughly equals 6K tokens
+// — enough for most file reads and short shell output, but small enough
+// that an unexpected mega-output (e.g. log dump, 1MB file) won't blow up
+// the next request.
+const DefaultMaxToolResultSizeChars = 25_000
+
 // ToolDefinition represents a tool that can be used by the AI model
 type ToolDefinition struct {
 	Name                 string         `json:"name"`
@@ -104,6 +111,21 @@ type ToolDefinition struct {
 	RequiredCapabilities []string       `json:"requiredcapabilities,omitempty"`
 
 	Parallel bool `json:"-"`
+
+	// MaxResultSizeChars caps the inline tool result size in chars. When the
+	// tool callback returns text longer than this, the loop spills the full
+	// text to disk and replaces the inline result with a preview + path so
+	// the model can still reference it without bloating the context window.
+	// Zero or negative means use DefaultMaxToolResultSizeChars.
+	MaxResultSizeChars int `json:"-"`
+
+	// Prompt is model-facing usage guidance appended to the system prompt
+	// when this tool is included for the turn. Use it for the rules a model
+	// would otherwise have to learn from failures: parallel-safety,
+	// uniqueness requirements, "must read before edit", path conventions.
+	// The schema's Description should remain a one-liner; long-form
+	// instructions belong here.
+	Prompt string `json:"-"`
 
 	ToolTextCallback func(any) (string, error)                     `json:"-"`
 	ToolAnyCallback  func(any, *UIMessageDataToolUse) (any, error) `json:"-"` // *UIMessageDataToolUse will NOT be nil
@@ -307,6 +329,7 @@ type ToolAuditEvent struct {
 	DurationMs int64  `json:"durationms"`
 	Outcome    string `json:"outcome"`
 	ErrorText  string `json:"error,omitempty"`
+	ErrorType  string `json:"errortype,omitempty"` // one of ErrorType_* constants
 }
 
 type AIMetrics struct {
@@ -390,8 +413,24 @@ type AIToolResult struct {
 	ToolName  string `json:"toolname"`
 	ToolUseID string `json:"tooluseid"`
 	ErrorText string `json:"errortext,omitempty"`
+	// ErrorType is a coarse machine-readable category for telemetry and
+	// loop-level decisions. Empty when the call succeeded. Allowed values
+	// are the ErrorType_* constants below — keep this list flat (no
+	// per-tool subcategories) so reports stay comparable across tools.
+	ErrorType string `json:"errortype,omitempty"`
 	Text      string `json:"text,omitempty"`
 }
+
+const (
+	ErrorTypeValidation = "validation"  // bad input, schema mismatch, missing required field
+	ErrorTypeNotFound   = "not_found"   // file/path/resource doesn't exist
+	ErrorTypePermission = "permission"  // EACCES, EPERM, sandbox/policy denial
+	ErrorTypeTimeout    = "timeout"     // tool exceeded its own time budget
+	ErrorTypeCanceled   = "canceled"    // user/parent context canceled
+	ErrorTypePanic      = "panic"       // recovered runtime panic
+	ErrorTypeStaleFile  = "stale_file"  // file modified externally since last read
+	ErrorTypeUnknown    = "unknown"     // fallback when classification fails
+)
 
 func (m *AIMessage) GetMessageId() string {
 	return m.MessageId

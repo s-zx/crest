@@ -45,7 +45,18 @@ func RunAgent(ctx context.Context, sseHandler *sse.SSEHandlerCh, clientID string
 	if opts.Session != nil {
 		opts.Session.Ctx = ctx
 	}
+	// === Cache-stable prefix ===
+	// shared header → mode prompt → tool prompts (sorted). These rarely
+	// change within a chat, so providers can cache the prefix.
 	systemPrompt := SystemPromptForMode(opts.Session.Mode)
+	toolList := ToolsForMode(opts.Session)
+	if toolPrompts := BuildToolPromptSection(toolList); toolPrompts != "" {
+		systemPrompt = append(systemPrompt, toolPrompts)
+	}
+	// === Dynamic suffix (per-request) ===
+	// Terminal context, skills, project guidelines, and plan content
+	// change between requests in the same chat — keep them after the
+	// cacheable prefix so the cache stays warm.
 	if termCtx := BuildTerminalContext(opts.Session); termCtx != "" {
 		systemPrompt = append(systemPrompt, termCtx)
 	}
@@ -68,7 +79,7 @@ func RunAgent(ctx context.Context, sseHandler *sse.SSEHandlerCh, clientID string
 		ChatId:               agentChatId,
 		ClientId:             clientID,
 		Config:               opts.AIOpts,
-		Tools:                ToolsForMode(opts.Session),
+		Tools:                toolList,
 		SystemPrompt:         systemPrompt,
 		TabId:                opts.Session.TabID,
 		AllowNativeWebSearch: false,

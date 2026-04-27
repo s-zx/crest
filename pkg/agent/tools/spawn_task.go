@@ -159,15 +159,61 @@ func runSpawnTask(params *spawnTaskInput, cfg SpawnTaskConfig) (string, error) {
 	sseHandler := sse.MakeDiscardSSEHandlerCh(ctx)
 	defer sseHandler.Close()
 
-	metrics, err := aiusechat.RunAIChat(ctx, sseHandler, backend, chatOpts)
-	if err != nil {
-		return "", fmt.Errorf("sub-task failed: %w", err)
-	}
+	metrics, runErr := aiusechat.RunAIChat(ctx, sseHandler, backend, chatOpts)
 
-	return fmt.Sprintf("Sub-task completed: %d steps, %d tool calls, %d input tokens, %d output tokens, error=%v",
+	// Extract the sub-agent's final assistant text. Without this the parent
+	// only gets a metrics blob, which is useless — the parent's whole reason
+	// to spawn was to learn what the sub-agent figured out. Falls back to a
+	// metrics-only response if extraction fails so the parent still sees the
+	// failure mode rather than nothing.
+	finalText := extractFinalAssistantText(backend, chatOpts.ChatId)
+
+	metricsLine := fmt.Sprintf("[subtask: %d steps, %d tool calls, in=%d/out=%d tokens, error=%v]",
 		metrics.RequestCount, metrics.ToolUseCount,
 		metrics.Usage.InputTokens, metrics.Usage.OutputTokens,
-		metrics.HadError), nil
+		metrics.HadError)
+
+	if runErr != nil {
+		if finalText != "" {
+			return finalText + "\n\n" + metricsLine + "\nError: " + runErr.Error(), nil
+		}
+		return "", fmt.Errorf("sub-task failed: %w", runErr)
+	}
+	if finalText == "" {
+		return metricsLine + "\n(sub-agent produced no final text — likely hit step budget or completed silently)", nil
+	}
+	return finalText + "\n\n" + metricsLine, nil
+}
+
+func extractFinalAssistantText(backend aiusechat.UseChatBackend, chatId string) string {
+	chat := chatstore.DefaultChatStore.Get(chatId)
+	if chat == nil {
+		return ""
+	}
+	uiChat, err := backend.ConvertAIChatToUIChat(*chat)
+	if err != nil || uiChat == nil {
+		return ""
+	}
+	// Walk backwards: the last assistant message's text parts are the final reply.
+	for i := len(uiChat.Messages) - 1; i >= 0; i-- {
+		msg := uiChat.Messages[i]
+		if msg.Role != "assistant" {
+			continue
+		}
+		var b strings.Builder
+		for _, p := range msg.Parts {
+			if p.Type == "text" && p.Text != "" {
+				if b.Len() > 0 {
+					b.WriteString("\n\n")
+				}
+				b.WriteString(p.Text)
+			}
+		}
+		if s := strings.TrimSpace(b.String()); s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 func autoApprovedFn(any) string {

@@ -6,7 +6,10 @@ package agent
 import (
 	"embed"
 	"fmt"
+	"sort"
 	"strings"
+
+	"github.com/s-zx/crest/pkg/aiusechat/uctypes"
 )
 
 //go:embed prompts/*.md
@@ -49,4 +52,31 @@ func SystemPromptForMode(mode *Mode) []string {
 		modePrompt = doPrompt
 	}
 	return []string{sharedHeader, modePrompt}
+}
+
+// BuildToolPromptSection returns the per-tool usage guidance block for the
+// tools enabled this turn. Keeps tool prompts in a single deterministic block
+// (alphabetical by name) so the prompt prefix stays cache-stable across turns
+// even when the tool list is constructed in different orders. Tools without
+// a Prompt field contribute nothing — Description alone is what the API sees.
+func BuildToolPromptSection(tools []uctypes.ToolDefinition) string {
+	prompts := make([]string, 0, len(tools))
+	for _, t := range tools {
+		if t.Prompt == "" {
+			continue
+		}
+		prompts = append(prompts, strings.TrimSpace(t.Prompt))
+	}
+	if len(prompts) == 0 {
+		return ""
+	}
+	sort.Strings(prompts)
+	var b strings.Builder
+	b.WriteString("<tool_prompts>\n")
+	for _, p := range prompts {
+		b.WriteString(p)
+		b.WriteString("\n\n")
+	}
+	b.WriteString("</tool_prompts>")
+	return b.String()
 }

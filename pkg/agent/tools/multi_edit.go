@@ -68,12 +68,17 @@ func applyMultiEdits(content string, edits []editOp) (string, error) {
 	return content, nil
 }
 
-func MultiEdit(approval func(any) string) uctypes.ToolDefinition {
+func MultiEdit(chatId string, approval func(any) string) uctypes.ToolDefinition {
 	return uctypes.ToolDefinition{
 		Name:        "multi_edit",
 		DisplayName: "Multi Edit",
 		Description: "Apply multiple search-and-replace edits to a single file atomically. All edits succeed or none are applied. More efficient than multiple edit_text_file calls.",
 		ToolLogName: "agent:multi_edit",
+		Prompt: `multi_edit: Applies a list of edits to one file atomically.
+- Edits apply sequentially in the order given — later edits see earlier edits' results. Plan accordingly: if you rename a symbol and then change a line that references it, write the rename first.
+- Each edit's "old_string" must be unique in the (current) file content unless "replace_all": true.
+- All edits succeed or none — a single bad edit reverts the whole call.
+- Prefer this over multiple edit_text_file calls on the same file.`,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -156,6 +161,9 @@ func MultiEdit(approval func(any) string) uctypes.ToolDefinition {
 			if fileInfo.IsDir() {
 				return nil, fmt.Errorf("path is a directory, not a file")
 			}
+			if err := checkFileUnchanged(chatId, expandedPath); err != nil {
+				return nil, err
+			}
 
 			original, err := os.ReadFile(expandedPath)
 			if err != nil {
@@ -180,6 +188,7 @@ func MultiEdit(approval func(any) string) uctypes.ToolDefinition {
 			if err != nil {
 				return nil, fmt.Errorf("failed to write file: %w", err)
 			}
+			recordFileRead(chatId, expandedPath)
 
 			return &multiEditOutput{
 				Success:      true,

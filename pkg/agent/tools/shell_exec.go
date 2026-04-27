@@ -60,6 +60,13 @@ func ShellExec(tabID, defaultBlockID, defaultCwd, defaultConnection string, appr
 		DisplayName: "Shell Execute",
 		Description: "Run a shell command in a new visible terminal block. The command output is visible to the user in real-time. Returns exit code and a tail of stdout. If output is truncated, the full output is saved to a spillover log file whose path is returned — use `read_text_file` on it to access the full output.",
 		ToolLogName: "agent:shell_exec",
+		Prompt: `shell_exec: Runs a shell command in a new visible terminal block.
+- Avoid cat/head/tail/sed/awk/echo for file ops — use read_text_file, edit_text_file, write_text_file, or search instead. They round-trip less and the diff is reviewable.
+- Quote paths that contain spaces. Prefer absolute paths or rely on the agent's cwd; don't "cd <dir> && cmd" unless cd is explicitly required.
+- Chain dependent commands with && so a failure stops the chain. Use ; only when later commands should run regardless of failure. Avoid newlines inside the cmd string.
+- An exit code of 127 means "command not found" — don't retry the same command after a 127. Check what's actually installed first (e.g. shell_exec "command -v <name>").
+- Only one shell_exec runs at a time per session. Don't spawn long-running daemons here — use create_block for those.
+- Never bypass safety checks like --no-verify, --force, --no-gpg-sign unless the user explicitly asked for it.`,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

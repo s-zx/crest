@@ -254,6 +254,9 @@ func processToolCallInternal(backend UseChatBackend, toolCall uctypes.WaveToolCa
 	if result.ErrorText != "" {
 		toolCall.ToolUseData.Status = uctypes.ToolUseStatusError
 		toolCall.ToolUseData.ErrorMessage = result.ErrorText
+		if result.ErrorType == "" {
+			result.ErrorType = classifyToolError(result.ErrorText)
+		}
 		result.ErrorText = result.ErrorText + "\n\n[Reflection required] Before retrying, identify exactly what went wrong and why. Try a different approach or different arguments rather than repeating the same call."
 	} else {
 		toolCall.ToolUseData.Status = uctypes.ToolUseStatusCompleted
@@ -274,6 +277,16 @@ func processToolCall(backend UseChatBackend, toolCall uctypes.WaveToolCall, chat
 
 	toolDef := chatOpts.GetToolDefinition(toolCall.Name)
 	result := processToolCallInternal(backend, toolCall, chatOpts, toolDef, sseHandler)
+
+	if result.ErrorText == "" {
+		spillToolResultIfOversized(&result, toolDef, chatOpts.ChatId)
+	} else if result.ErrorType == "" {
+		// Belt-and-suspenders: processToolCallInternal classifies for the
+		// happy-path (resolve→error annotate) but its early-return branches
+		// (invalid call, denied approval, validation failure) bypass that.
+		// Catch them here so every error has an ErrorType in telemetry.
+		result.ErrorType = classifyToolError(result.ErrorText)
+	}
 
 	durationMs := time.Since(startTs).Milliseconds()
 
@@ -321,6 +334,7 @@ func processToolCall(backend UseChatBackend, toolCall uctypes.WaveToolCall, chat
 			DurationMs: durationMs,
 			Outcome:    outcomeStr,
 			ErrorText:  result.ErrorText,
+			ErrorType:  result.ErrorType,
 		},
 		IsError:     isError,
 		ToolLogName: toolLogName,
@@ -395,6 +409,7 @@ func processAllToolCalls(backend UseChatBackend, stopReason *uctypes.WaveStopRea
 								ToolName:  toolCall.Name,
 								ToolUseID: toolCall.ID,
 								ErrorText: fmt.Sprintf("panic in parallel tool execution: %v", r),
+								ErrorType: uctypes.ErrorTypePanic,
 							},
 							IsError: true,
 							Audit: uctypes.ToolAuditEvent{
@@ -404,6 +419,7 @@ func processAllToolCalls(backend UseChatBackend, stopReason *uctypes.WaveStopRea
 								ToolCallId: toolCall.ID,
 								Outcome:    "error",
 								ErrorText:  fmt.Sprintf("panic: %v", r),
+								ErrorType:  uctypes.ErrorTypePanic,
 							},
 						}
 					}
@@ -414,6 +430,7 @@ func processAllToolCalls(backend UseChatBackend, stopReason *uctypes.WaveStopRea
 							ToolName:  toolCall.Name,
 							ToolUseID: toolCall.ID,
 							ErrorText: fmt.Sprintf("canceled before tool execution: %v", ctxErr),
+							ErrorType: uctypes.ErrorTypeCanceled,
 						},
 						IsError: true,
 						Audit: uctypes.ToolAuditEvent{
@@ -423,6 +440,7 @@ func processAllToolCalls(backend UseChatBackend, stopReason *uctypes.WaveStopRea
 							ToolCallId: toolCall.ID,
 							Outcome:    "canceled",
 							ErrorText:  ctxErr.Error(),
+							ErrorType:  uctypes.ErrorTypeCanceled,
 						},
 					}
 					return
@@ -496,6 +514,74 @@ func extractCmdName(input any) string {
 	return name
 }
 
+// classifyToolError maps a tool's error text to a coarse ErrorType for
+// telemetry and loop-level decisions. The match is keyword-based because
+// our tools surface plain `error` values rather than typed errors —
+// switching to typed errors across every tool callback would be a much
+// bigger refactor for a telemetry-only payoff. Order matters: more
+// specific patterns first (panic, canceled, stale-file) before broad
+// substring tests (permission, timeout, not-found).
+func classifyToolError(errText string) string {
+	if errText == "" {
+		return ""
+	}
+	low := strings.ToLower(errText)
+	switch {
+	case strings.Contains(low, "panic in tool"):
+		return uctypes.ErrorTypePanic
+	case strings.Contains(low, "canceled before tool execution"),
+		strings.Contains(low, "context canceled"),
+		strings.Contains(low, "context deadline exceeded"):
+		return uctypes.ErrorTypeCanceled
+	case strings.Contains(low, "modified externally since you last read"):
+		return uctypes.ErrorTypeStaleFile
+	case strings.Contains(low, "permission denied"),
+		strings.Contains(low, "access denied"),
+		strings.Contains(low, "operation not permitted"),
+		strings.Contains(low, "not authorized"):
+		return uctypes.ErrorTypePermission
+	case strings.Contains(low, "timeout"),
+		strings.Contains(low, "timed out"),
+		strings.Contains(low, "deadline exceeded"):
+		return uctypes.ErrorTypeTimeout
+	case strings.Contains(low, "no such file"),
+		strings.Contains(low, "not found"),
+		strings.Contains(low, "does not exist"),
+		strings.Contains(low, "file not found"):
+		return uctypes.ErrorTypeNotFound
+	case strings.Contains(low, "invalid"),
+		strings.Contains(low, "must be"),
+		strings.Contains(low, "is required"),
+		strings.Contains(low, "schema"),
+		strings.Contains(low, "missing"):
+		return uctypes.ErrorTypeValidation
+	default:
+		return uctypes.ErrorTypeUnknown
+	}
+}
+
+// isContextLengthError matches error strings from providers that mean
+// "your prompt exceeded the model's context window". We don't have a
+// structured error type for this — it comes through as a plain error
+// from the streaming POST or mid-stream. The match is intentionally
+// broad; a false positive only triggers one extra summarize+retry.
+func isContextLengthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "context length") ||
+		strings.Contains(msg, "context_length") ||
+		strings.Contains(msg, "context window") ||
+		strings.Contains(msg, "prompt is too long") ||
+		strings.Contains(msg, "prompt too long") ||
+		strings.Contains(msg, "maximum context") ||
+		strings.Contains(msg, "max_tokens_to_keep") ||
+		strings.Contains(msg, "request too large") ||
+		strings.Contains(msg, "too many tokens") ||
+		strings.Contains(msg, "413")
+}
+
 func detectDoomLoop(sigs []string, threshold int) bool {
 	counts := make(map[string]int)
 	for _, sig := range sigs {
@@ -541,6 +627,9 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 	unavailableCmds := make(map[string]bool)
 	hasProducedOutput := false
 	outputNudged := false
+	maxTokensEscalated := false
+	maxTokensResumeAttempts := 0
+	reactiveCompactAttempted := false
 	var lastInputTokens int
 	var cont *uctypes.WaveContinueResponse
 	var recentToolSigs []string
@@ -603,6 +692,27 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 				metrics.Usage.Model = "mixed"
 			}
 		}
+		if err != nil && isContextLengthError(err) && !reactiveCompactAttempted && chatOpts.ContextBudget > 0 {
+			// Last-ditch recovery: provider rejected the request because the
+			// context exceeded its window. Aggressively summarize and retry once.
+			// Single-shot — if the retry also blows up we surface the error.
+			reactiveCompactAttempted = true
+			summary, removed := chatstore.DefaultChatStore.CompactMessagesWithSummary(chatOpts.ChatId, 1, 5)
+			log.Printf("reactive compact on context-length error: removed=%d, error=%v\n", removed, err)
+			if removed > 0 {
+				if summary != "" {
+					summaryMsg := &uctypes.AIMessage{
+						MessageId: uuid.New().String(),
+						Parts:     []uctypes.AIMessagePart{{Type: uctypes.AIMessagePartTypeText, Text: summary}},
+					}
+					nativeMsg, convErr := backend.ConvertAIMessageToNativeChatMessage(*summaryMsg)
+					if convErr == nil {
+						_ = chatstore.DefaultChatStore.PostMessage(chatOpts.ChatId, &chatOpts.Config, nativeMsg)
+					}
+				}
+				continue
+			}
+		}
 		if firstStep && err != nil {
 			metrics.HadError = true
 			return metrics, fmt.Errorf("failed to stream %s chat: %w", chatOpts.Config.APIType, err)
@@ -620,20 +730,33 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 				}
 			}
 		}
-		if chatOpts.ContextBudget > 0 && lastInputTokens > chatOpts.ContextBudget*4/5 {
-			const compactKeepLast = 10
-			summary, removed := chatstore.DefaultChatStore.CompactMessagesWithSummary(chatOpts.ChatId, 1, compactKeepLast)
-			if removed > 0 {
-				log.Printf("context compaction: removed %d messages (input_tokens=%d, budget=%d)\n", removed, lastInputTokens, chatOpts.ContextBudget)
-				if summary != "" {
-					summaryMsg := &uctypes.AIMessage{
-						MessageId: uuid.New().String(),
-						Parts:     []uctypes.AIMessagePart{{Type: uctypes.AIMessagePartTypeText, Text: summary}},
+		if chatOpts.ContextBudget > 0 {
+			// Tiered compaction: kick in earlier with bigger keepLast
+			// (microcompact) so we trim history before getting close to the
+			// hard context window. Only the heavier 80% tier injects a summary
+			// message — the gentle tier just trims and trusts the model to
+			// notice if it lost something it cares about.
+			budget := chatOpts.ContextBudget
+			switch {
+			case lastInputTokens > budget*4/5:
+				summary, removed := chatstore.DefaultChatStore.CompactMessagesWithSummary(chatOpts.ChatId, 1, 10)
+				if removed > 0 {
+					log.Printf("context compaction (heavy): removed %d messages (input_tokens=%d, budget=%d)\n", removed, lastInputTokens, budget)
+					if summary != "" {
+						summaryMsg := &uctypes.AIMessage{
+							MessageId: uuid.New().String(),
+							Parts:     []uctypes.AIMessagePart{{Type: uctypes.AIMessagePartTypeText, Text: summary}},
+						}
+						nativeMsg, err := backend.ConvertAIMessageToNativeChatMessage(*summaryMsg)
+						if err == nil {
+							_ = chatstore.DefaultChatStore.PostMessage(chatOpts.ChatId, &chatOpts.Config, nativeMsg)
+						}
 					}
-					nativeMsg, err := backend.ConvertAIMessageToNativeChatMessage(*summaryMsg)
-					if err == nil {
-						_ = chatstore.DefaultChatStore.PostMessage(chatOpts.ChatId, &chatOpts.Config, nativeMsg)
-					}
+				}
+			case lastInputTokens > budget*3/5:
+				removed := chatstore.DefaultChatStore.CompactMessages(chatOpts.ChatId, 1, 20)
+				if removed > 0 {
+					log.Printf("context compaction (microcompact): removed %d messages (input_tokens=%d, budget=%d)\n", removed, lastInputTokens, budget)
 				}
 			}
 		}
@@ -690,6 +813,45 @@ func RunAIChat(ctx context.Context, sseHandler *sse.SSEHandlerCh, backend UseCha
 				ContinueFromKind: uctypes.StopKindToolUse,
 			}
 			continue
+		}
+		if stopReason != nil && stopReason.Kind == uctypes.StopKindMaxTokens {
+			// Reasoning models (Gemini 3.x, GPT-5, Claude w/ thinking) routinely
+			// blow through small max_tokens budgets on extended thinking. First
+			// hit: silently double the cap. Subsequent hits: tell the model to
+			// resume directly, up to 3 attempts. After that, surface the error.
+			if !maxTokensEscalated && chatOpts.Config.MaxTokens < 32768 {
+				newMax := chatOpts.Config.MaxTokens * 2
+				if newMax > 65536 {
+					newMax = 65536
+				}
+				if newMax <= chatOpts.Config.MaxTokens {
+					newMax = 32768
+				}
+				log.Printf("max_tokens hit: escalating %d -> %d\n", chatOpts.Config.MaxTokens, newMax)
+				chatOpts.Config.MaxTokens = newMax
+				maxTokensEscalated = true
+				cont = &uctypes.WaveContinueResponse{
+					Model:            chatOpts.Config.Model,
+					ContinueFromKind: uctypes.StopKindMaxTokens,
+				}
+				continue
+			}
+			if maxTokensResumeAttempts < 3 {
+				maxTokensResumeAttempts++
+				log.Printf("max_tokens hit: resume attempt %d/3\n", maxTokensResumeAttempts)
+				chatOpts.SystemPrompt = append(chatOpts.SystemPrompt,
+					"Output token limit hit. Resume directly from where you stopped — no apology, no recap, just continue.")
+				cont = &uctypes.WaveContinueResponse{
+					Model:            chatOpts.Config.Model,
+					ContinueFromKind: uctypes.StopKindMaxTokens,
+				}
+				continue
+			}
+			log.Printf("max_tokens hit: giving up after %d resume attempts\n", maxTokensResumeAttempts)
+			_ = sseHandler.AiMsgError("Output token limit hit repeatedly — model could not finish. Try a smaller request or raise ai:maxtokens.")
+			_ = sseHandler.AiMsgFinish("max_tokens", nil)
+			metrics.HadError = true
+			break
 		}
 		if chatOpts.PendingTodosCheck != nil && chatOpts.PendingTodosCheck() && !pendingTodosNudged {
 			pendingTodosNudged = true

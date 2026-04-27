@@ -47,6 +47,12 @@ func Search(defaultCwd string, approval func(any) string) uctypes.ToolDefinition
 		DisplayName: "Search",
 		Description: "Fast regex search across files using ripgrep. Returns matching lines with file paths and line numbers. Supports glob filters and hidden files. Use for finding code patterns, function definitions, imports, configuration values, etc.",
 		ToolLogName: "agent:search",
+		Prompt: `search: Regex search over files via ripgrep.
+- Default path is the user's current working directory — omit "path" unless searching a specific subtree.
+- Narrow with "glob" (e.g. "*.go", "*.{ts,tsx}") rather than reading entire directory trees.
+- Patterns are regex; quote special characters (e.g. "\\." for a literal dot).
+- Prefer search over shell_exec "grep -r" — it's faster, more predictable, and respects .gitignore.
+- For finding files by name, use a permissive pattern + glob; for content, use the actual code pattern.`,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
