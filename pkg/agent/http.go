@@ -80,7 +80,6 @@ type PostAgentMessageRequest struct {
 	TabId         string            `json:"tabid"`
 	BlockId       string            `json:"blockid"`
 	Mode          string            `json:"mode"`
-	PermissionMode string           `json:"permission_mode,omitempty"`
 	AIMode        string            `json:"aimode"`
 	ModelOverride string            `json:"modeloverride,omitempty"`
 	PlanPath      string            `json:"planpath,omitempty"`
@@ -162,18 +161,29 @@ func buildAIOptsFromSettings() (*uctypes.AIOptsType, error) {
 	if apiToken == "" {
 		return nil, fmt.Errorf("no API key configured — open Settings → AI Provider to set one up")
 	}
+	if baseUrl == "" && apiType == uctypes.APIType_GoogleGemini && model != "" {
+		baseUrl = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent", model)
+	}
 	if baseUrl == "" {
 		return nil, fmt.Errorf("no ai:baseurl configured — open Settings → AI Provider to set one up")
+	}
+	maxTokens := int(settings.AiMaxTokens)
+	if maxTokens <= 0 {
+		maxTokens = 16384
+	}
+	capabilities := []string{uctypes.AICapabilityTools}
+	if apiType == uctypes.APIType_GoogleGemini {
+		capabilities = append(capabilities, uctypes.AICapabilityImages, uctypes.AICapabilityPdfs)
 	}
 	return &uctypes.AIOptsType{
 		APIType:       apiType,
 		Model:         model,
 		Endpoint:      baseUrl,
 		APIToken:      apiToken,
-		MaxTokens:     16384,
+		MaxTokens:     maxTokens,
 		ThinkingLevel: uctypes.ThinkingLevelMedium,
 		Verbosity:     uctypes.VerbosityLevelMedium,
-		Capabilities:  []string{uctypes.AICapabilityTools},
+		Capabilities:  capabilities,
 	}, nil
 }
 
@@ -331,12 +341,6 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("unknown agent mode %q (valid: ask, plan, do, bench)", req.Mode), http.StatusBadRequest)
 		return
 	}
-	permissionMode, ok := ParsePermissionMode(req.PermissionMode)
-	if !ok {
-		http.Error(w, fmt.Sprintf("unknown permission_mode %q (valid: default, accept_edits, bypass)", req.PermissionMode), http.StatusBadRequest)
-		return
-	}
-
 	if err := req.Msg.Validate(); err != nil {
 		http.Error(w, fmt.Sprintf("Message validation failed: %v", err), http.StatusBadRequest)
 		return
@@ -357,12 +361,11 @@ func PostAgentMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess := &Session{
-		ChatID:      req.ChatID,
-		TabID:       req.TabId,
-		BlockID:     req.BlockId,
-		Mode:        mode,
-		PermissionMode: permissionMode,
-		AIOpts:      *aiOpts,
+		ChatID:     req.ChatID,
+		TabID:      req.TabId,
+		BlockID:    req.BlockId,
+		Mode:       mode,
+		AIOpts:     *aiOpts,
 		Cwd:         req.Context.Cwd,
 		Connection:  req.Context.Connection,
 		LastCommand: req.Context.LastCommand,
