@@ -89,9 +89,17 @@ class CrestAgent(BaseInstalledAgent):
         api_key = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", "")
         base_url = os.environ.get("CREST_BASE_URL", "")
         api_type = os.environ.get("CREST_API_TYPE", "")
+        google_api_key = os.environ.get("GOOGLE_API_KEY", "")
 
-        if not base_url:
+        if google_api_key and model.startswith("google/"):
+            gemini_model = model.removeprefix("google/")
+            base_url = f"https://generativelanguage.googleapis.com/v1beta/models/{gemini_model}:streamGenerateContent"
+            api_type = "google-gemini"
+            api_key = google_api_key
+            model = gemini_model
+        elif not base_url:
             base_url = "https://openrouter.ai/api/v1"
+
         if not api_type:
             api_type = _detect_api_type(base_url)
 
